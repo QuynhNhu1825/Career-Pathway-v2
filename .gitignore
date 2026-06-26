@@ -1,0 +1,14 @@
+# Thư viện
+node_modules/
+
+# File cấu hình bảo mật 
+.env
+
+# Các file log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Thư mục build (nếu có)
+dist/
+build/
