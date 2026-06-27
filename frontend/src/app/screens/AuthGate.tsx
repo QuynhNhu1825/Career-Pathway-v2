@@ -43,7 +43,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
   const [regPw2, setRegPw2] = useState("");
   const [regError, setRegError] = useState("");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!loginEmail || !loginPw) {
       setLoginError("Vui lòng nhập đầy đủ thông tin");
       return;
@@ -53,11 +53,39 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       return;
     }
     setLoginError("");
-    const name = loginEmail.split("@")[0].replace(/[._]/g, " ");
-    onLogin({ name: name.charAt(0).toUpperCase() + name.slice(1), email: loginEmail });
+
+    try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: loginEmail,
+          password: loginPw,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const userToLogin = {
+          name: data.profile?.fullName || data.user.email,
+          email: data.user.email,
+          ...data.user,
+          profile: data.profile,
+        };
+        onLogin(userToLogin);
+      } else {
+        setLoginError(data.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      setLoginError("Đã có lỗi xảy ra. Không thể kết nối đến máy chủ.");
+    }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!regName || !regEmail || !regPw || !regPw2) {
       setRegError("Vui lòng điền đầy đủ thông tin");
       return;
@@ -75,8 +103,43 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       return;
     }
     setRegError("");
-    onLogin({ name: regName, email: regEmail });
+    try {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: regName, email: regEmail, password: regPw }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Sau khi đăng ký thành công, tự động đăng nhập cho người dùng
+        const loginResponse = await fetch("http://localhost:5000/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: regEmail, password: regPw }),
+        });
+        const loginData = await loginResponse.json();
+        if (loginData.success) {
+          const userToLogin = {
+            name: loginData.profile?.fullName || loginData.user.email,
+            email: loginData.user.email,
+            ...loginData.user,
+            profile: loginData.profile,
+          };
+          onLogin(userToLogin);
+        } else {
+          setTab("login");
+          setLoginEmail(regEmail);
+          setLoginError("Đăng ký thành công! Vui lòng đăng nhập.");
+        }
+      } else {
+        setRegError(data.message || "Đăng ký thất bại.");
+      }
+    } catch (error) {
+      console.error("Register error:", error);
+      setRegError("Lỗi kết nối đến máy chủ.");
+    }
   };
+
 
   return (
     <Box sx={{ minHeight: "100vh", background: "linear-gradient(to bottom right, #f9fafb, #fef3c7)", display: "flex", flexDirection: "column", position: 'relative', overflow: 'hidden' }}>
@@ -254,4 +317,4 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       </Container>
     </Box>
   );
-}
+  }
