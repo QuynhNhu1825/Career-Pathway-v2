@@ -1,23 +1,67 @@
 const surveyService = require('../services/surveyService');
 const { claimAssessmentResult } = require('../services/assessmentService');
+const profileService = require('../services/profileService');
 
 const initSurvey = async (req, res) => {
     try {
-        const { mode, target_career, age, education, location, hobby } = req.body;
-        // Validate input
-        if (!mode || !['Targeted', 'Discovery'].includes(mode)) {
-            return res.status(400).json({ success: false, message: 'mode phải là Targeted hoặc Discovery' });
-        }
-        if (mode === 'Targeted' && !target_career) {
-            return res.status(400).json({ success: false, message: 'target_career là bắt buộc khi mode = Targeted' });
+        const { 
+            mode, 
+            target_career, 
+            age, 
+            education, 
+            location, 
+            hobby,
+            status,
+            subject_scores,
+            gpa,
+            userId
+        } = req.body;
+
+
+        // Lưu điểm người dùng
+        if (userId) {
+            await profileService.updateProfile(userId, {
+                fullName: req.body.name,
+                age,
+                educationLevel: education,
+                location,
+                hobby,
+                studentScores: subject_scores,
+                workerScores: {
+                    gpa
+                }
+            });
         }
 
-        const result = await surveyService.initSurvey(mode, target_career, { age, education, location, hobby });
-        res.status(200).json({ success: true, ...result });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+
+        const result = await surveyService.initSurvey(
+            mode,
+            target_career,
+            { 
+            age,
+            education,
+            location,
+            hobby,
+            status
+            },
+            {
+            scores: subject_scores,
+            gpa
+            }
+        );
+
+        res.status(200).json({
+            success:true,
+            ...result
+        });
+
+    } catch(error){
+        res.status(500).json({
+            success:false,
+            message:error.message
+        });
     }
-};
+}
 
 const submitSurvey = async (req, res) => {
     try {

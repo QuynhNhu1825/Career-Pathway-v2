@@ -29,10 +29,10 @@ import {
   Lock,
   Person as User,
 } from "@mui/icons-material";
-import GoogleIcon from "@mui/icons-material/Google";
-import FacebookIcon from "@mui/icons-material/Facebook";
 import { AuthUser } from "../App";
 import { amber } from "@mui/material/colors";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface NavigationProps {
   onStartAssessment: () => void;
@@ -58,7 +58,7 @@ function AuthModal({
   const [regPw2, setRegPw2] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!loginEmail || !loginPw) {
       setError("Vui lòng nhập đầy đủ thông tin");
       return;
@@ -67,37 +67,130 @@ function AuthModal({
       setError("Email không hợp lệ");
       return;
     }
+
     setError("");
-    const name = loginEmail.split("@")[0].replace(/[._]/g, " ");
-    onLogin({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      email: loginEmail,
-    });
-    onClose();
+
+    try {
+      const res = await fetch(`${API_URL}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: loginEmail,
+          password: loginPw,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.message || "Đăng nhập thất bại");
+        return;
+      }
+
+      const user: AuthUser = {
+        id: data.user.id,
+        name: data.profile?.fullName || data.user.email,
+        email: data.user.email,
+        role: data.user.role,
+        isActive: data.user.isActive,
+        profile: data.profile,
+      };
+
+      localStorage.setItem("user", JSON.stringify(user));
+
+      onLogin(user);
+
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError("Không thể kết nối server");
+    }
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!regName || !regEmail || !regPw || !regPw2) {
       setError("Vui lòng điền đầy đủ thông tin");
       return;
     }
+
     if (!regEmail.includes("@")) {
       setError("Email không hợp lệ");
       return;
     }
+
     if (regPw.length < 6) {
-      setError("Mật khẩu cần ít nhất 6 ký tự");
+      setError("Mật khẩu tối thiểu 6 ký tự");
       return;
     }
+
     if (regPw !== regPw2) {
       setError("Mật khẩu xác nhận không khớp");
       return;
     }
-    setError("");
-    onLogin({ name: regName, email: regEmail });
-    onClose();
-  };
 
+    setError("");
+
+    try {
+      const res = await fetch(`${API_URL}/api/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: regEmail,
+          password: regPw,
+          fullName: regName,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.message);
+        return;
+      }
+
+      // tự động login
+      const loginRes = await fetch(`${API_URL}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: regEmail,
+          password: regPw,
+        }),
+      });
+
+      const loginData = await loginRes.json();
+
+      if (!loginData.success) {
+        setTab("login");
+        setError("Đăng ký thành công. Vui lòng đăng nhập.");
+        return;
+      }
+
+      const user: AuthUser = {
+        id: loginData.user.id,
+        name: loginData.profile?.fullName || loginData.user.email,
+        email: loginData.user.email,
+        role: loginData.user.role,
+        isActive: loginData.user.isActive,
+        profile: loginData.profile,
+      };
+
+      localStorage.setItem("user", JSON.stringify(user));
+
+      onLogin(user);
+
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError("Không thể kết nối server");
+    }
+  };
   return (
     <Box>
       {/* Tabs */}
@@ -110,11 +203,13 @@ function AuthModal({
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
       >
         <Tab value="login" label="Đăng nhập" />
-        <Tab value="register" label="Tạo tài khoản" />
+
+        <Tab value="register" label="Đăng ký" />
       </Tabs>
 
       {tab === "login" ? (
         <Stack spacing={2}>
+          <p>Chào mừng bạn đã quay trở lại!</p>
           <TextField
             label="Email của bạn"
             type="email"
@@ -144,15 +239,6 @@ function AuthModal({
           <Button fullWidth variant="contained" onClick={handleLogin} sx={{ bgcolor: '#f59e0b', '&:hover': { bgcolor: '#ca8a04' } }}>
             Đăng nhập
           </Button>
-          <Divider>hoặc</Divider>
-          <Stack direction="row" spacing={2}>
-            <Button fullWidth variant="outlined" startIcon={<GoogleIcon />}>
-              Google
-            </Button>
-            <Button fullWidth variant="outlined" startIcon={<FacebookIcon sx={{ color: '#1877F2' }} />}>
-              Facebook
-            </Button>
-          </Stack>
         </Stack>
       ) : (
         <Stack spacing={2}>
@@ -175,17 +261,19 @@ function AuthModal({
               ),
             }}
           />
-          <TextField label="Xác nhận mật khẩu" type="password" value={regPw2} onChange={(e) => setRegPw2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRegister()} InputProps={{ startAdornment: <InputAdornment position="start"><Lock fontSize="small" /></InputAdornment> }} />
+          <TextField label="Xác nhận mật khẩu" type={showPw ? "text" : "password"} value={regPw2} onChange={(e) => setRegPw2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRegister()} InputProps={{ startAdornment: <InputAdornment position="start"><Lock fontSize="small" /></InputAdornment> 
+              , endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={() => setShowPw(!showPw)} edge="end">
+                    {showPw ? <EyeOff /> : <Eye />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+              }} />
           {error && <Alert severity="error">{error}</Alert>}
           <Button fullWidth variant="contained" onClick={handleRegister} sx={{ bgcolor: '#f59e0b', '&:hover': { bgcolor: '#ca8a04' } }}>
-            Tạo tài khoản
+            Đăng ký
           </Button>
-          <Typography variant="caption" color="text.secondary" textAlign="center">
-            Bằng cách đăng ký, bạn đồng ý với{" "}
-            <Box component="span" sx={{ color: amber[600], cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
-              Điều khoản sử dụng
-            </Box>
-          </Typography>
         </Stack>
       )}
     </Box>
@@ -216,10 +304,10 @@ export function Navigation({
           </Stack>
 
           <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, justifyContent: 'center', gap: 2 }}>
-            {["Trang chủ", "Tính năng", "Quy trình", "Đánh giá"].map((page) => (
+            {["Trang chủ", "Tính năng", "Tư vấn nhanh", "Khám phá"].map((page) => (
               <Button
                 key={page}
-                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Quy trình' ? 'how-it-works' : 'testimonials'}`}
+                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tư vấn nhanh' ? 'quickcareer' : 'assessment'}`}
                 sx={{ color: 'text.secondary', '&:hover': { color: amber[500] } }}
               >
                 {page}
@@ -258,10 +346,10 @@ export function Navigation({
       <Collapse in={isOpen} timeout="auto" unmountOnExit>
         <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: 1, borderColor: 'divider', py: 2 }}>
           <Stack spacing={1} sx={{ px: 2 }}>
-            {["Trang chủ", "Tính năng", "Quy trình", "Đánh giá"].map((page) => (
+            {["Trang chủ", "Tính năng", "Tư vấn nhanh", "Khám phá"].map((page) => (
               <Button
                 key={page}
-                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Quy trình' ? 'how-it-works' : 'testimonials'}`}
+                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tư vấn nhanh' ? 'quickcareer' : 'assessment'}`}
                 onClick={() => setIsOpen(false)}
                 sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
               >

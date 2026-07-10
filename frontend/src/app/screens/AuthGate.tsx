@@ -19,8 +19,8 @@ import {
 } from "@mui/material";
 import { ArrowBack as ArrowLeft, Lock, Mail, Person as User,   AutoAwesome, Visibility, VisibilityOff } from "@mui/icons-material";
 import { AuthUser } from "../App";
-import GoogleIcon from "@mui/icons-material/Google";
-import FacebookIcon from "@mui/icons-material/Facebook";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface AuthGateProps {
   onLogin: (user: AuthUser) => void;
@@ -55,7 +55,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
     setLoginError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/login", {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -66,28 +66,34 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
         }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (data.success) {
-        const userToLogin = {
-          name: data.profile?.fullName || data.user.email,
-          email: data.user.email,
-          ...data.user,
-          profile: data.profile,
-        };
-        onLogin(userToLogin);
-      } else {
-        setLoginError(data.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      if (!res.ok || !data.success) {
+        setLoginError(data.message || "Đăng nhập thất bại");
+        return;
       }
-    } catch (error) {
-      console.error("Login error:", error);
-      setLoginError("Đã có lỗi xảy ra. Không thể kết nối đến máy chủ.");
+
+      const user: AuthUser = {
+        id: data.user.id,
+        name: data.profile?.fullName || data.user.email,
+        email: data.user.email,
+        role: data.user.role,
+        isActive: data.user.isActive,
+        profile: data.profile,
+      };
+
+      localStorage.setItem("user", JSON.stringify(user));
+
+      onLogin(user);
+    } catch (err) {
+      console.error(err);
+      setLoginError("Không thể kết nối server");
     }
   };
 
   const handleRegister = async () => {
     if (!regName || !regEmail || !regPw || !regPw2) {
-      setRegError("Vui lòng điền đầy đủ thông tin");
+      setRegError("Vui lòng nhập đầy đủ thông tin");
       return;
     }
     if (!regEmail.includes("@")) {
@@ -95,7 +101,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       return;
     }
     if (regPw.length < 6) {
-      setRegError("Mật khẩu cần ít nhất 6 ký tự");
+      setRegError("Mật khẩu phải có ít nhất 6 ký tự");
       return;
     }
     if (regPw !== regPw2) {
@@ -103,43 +109,65 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       return;
     }
     setRegError("");
+
     try {
-      const response = await fetch("http://localhost:5000/api/register", {
+      const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: regName, email: regEmail, password: regPw }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: regEmail,
+          password: regPw,
+          fullName: regName,
+        }),
       });
-      const data = await response.json();
-      if (data.success) {
-        // Sau khi đăng ký thành công, tự động đăng nhập cho người dùng
-        const loginResponse = await fetch("http://localhost:5000/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: regEmail, password: regPw }),
-        });
-        const loginData = await loginResponse.json();
-        if (loginData.success) {
-          const userToLogin = {
-            name: loginData.profile?.fullName || loginData.user.email,
-            email: loginData.user.email,
-            ...loginData.user,
-            profile: loginData.profile,
-          };
-          onLogin(userToLogin);
-        } else {
-          setTab("login");
-          setLoginEmail(regEmail);
-          setLoginError("Đăng ký thành công! Vui lòng đăng nhập.");
-        }
-      } else {
-        setRegError(data.message || "Đăng ký thất bại.");
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setRegError(data.message);
+        return;
       }
-    } catch (error) {
-      console.error("Register error:", error);
-      setRegError("Lỗi kết nối đến máy chủ.");
+
+      // Đăng nhập luôn
+      const loginRes = await fetch(`${API_URL}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: regEmail,
+          password: regPw,
+        }),
+      });
+
+      const loginData = await loginRes.json();
+
+      if (!loginData.success) {
+        setTab("login");
+        setLoginEmail(regEmail);
+        setLoginError("Đăng ký thành công. Vui lòng đăng nhập lại.");
+        return;
+      }
+
+      const user: AuthUser = {
+        id: loginData.user.id,
+        name: loginData.profile?.fullName || loginData.user.email,
+        email: loginData.user.email,
+        role: loginData.user.role,
+        isActive: loginData.user.isActive,
+        profile: loginData.profile,
+      };
+
+      localStorage.setItem("user", JSON.stringify(user));
+
+      onLogin(user);
+    } catch (err) {
+      console.error(err);
+      setRegError("Không thể kết nối server");
     }
   };
-
 
   return (
     <Box sx={{ minHeight: "100vh", background: "linear-gradient(to bottom right, #f9fafb, #fef3c7)", display: "flex", flexDirection: "column", position: 'relative', overflow: 'hidden' }}>
@@ -182,7 +210,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
               Đăng nhập để xem kết quả
             </Typography>
             <Typography color="text.secondary">
-              Kết quả phân tích chi tiết của bạn đang chờ. Đăng nhập hoặc tạo tài khoản để xem ngay.
+              Kết quả phân tích chi tiết của bạn đang chờ. Đăng nhập hoặc đăng ký để xem ngay.
             </Typography>
           </Stack>
 
@@ -198,7 +226,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
               sx={{ borderBottom: 1, borderColor: 'divider' }}
             >
               <Tab value="login" label="Đăng nhập" onClick={() => setLoginError("")} />
-              <Tab value="register" label="Tạo tài khoản" onClick={() => setRegError("")} />
+              <Tab value="register" label="Đăng ký" onClick={() => setRegError("")} />
             </Tabs>
 
             <Box p={4}>
@@ -249,20 +277,6 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
                   >
                     Đăng nhập & xem kết quả
                   </Button>
-
-                  <Divider sx={{ my: 2 }}>hoặc</Divider>
-
-                  <Stack direction="row" spacing={2}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      sx={{ borderColor: 'grey.300', color: 'text.primary', '&:hover': { bgcolor: 'grey.50' } }}
-                      startIcon={<GoogleIcon />}
-                    >
-                      Google
-                    </Button>
-                    <Button fullWidth variant="outlined" sx={{ borderColor: 'grey.300', color: 'text.primary', '&:hover': { bgcolor: 'grey.50' } }} startIcon={<FacebookIcon sx={{ color: '#1877F2' }} />}>Facebook</Button>
-                  </Stack>
                 </Stack>
               ) : (
                 <Stack spacing={2}>
@@ -296,7 +310,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
                     onClick={handleRegister}
                     sx={{ mt: 1, bgcolor: '#f59e0b', '&:hover': { bgcolor: '#ca8a04' } }}
                   >
-                    Tạo tài khoản & xem kết quả
+                    Đăng ký & xem kết quả
                   </Button>
 
                   <Typography variant="caption" color="text.secondary" textAlign="center">

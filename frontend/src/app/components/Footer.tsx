@@ -21,8 +21,12 @@ import {
   Psychology as Brain,
 } from "@mui/icons-material";
 import { amber } from "@mui/material/colors";
-
-export function Footer() {
+interface FooterProps {
+  onPrivacy: () => void;
+  onGuide: () => void;
+  onAbout: () => void;
+}
+export function Footer({ onPrivacy, onGuide, onAbout }: FooterProps) {
   return (
     <Box component="footer" id="contact" sx={{ bgcolor: "grey.900", color: "grey.300", py: 8 }}>
       <Container maxWidth="lg">
@@ -40,6 +44,10 @@ export function Footer() {
             </Typography>
             <Stack direction="row" spacing={1}>
               <IconButton
+                component="a"
+                href="https://www.facebook.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 sx={{
                   width: 40,
                   height: 40,
@@ -49,7 +57,12 @@ export function Footer() {
               >
                 <Facebook sx={{ color: "white" }} />
               </IconButton>
+
               <IconButton
+                component="a"
+                href="https://www.instagram.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 sx={{
                   width: 40,
                   height: 40,
@@ -59,7 +72,12 @@ export function Footer() {
               >
                 <Instagram sx={{ color: "white" }} />
               </IconButton>
+
               <IconButton
+                component="a"
+                href="https://www.linkedin.com"
+                target="_blank"
+                rel="noopener noreferrer"
                 sx={{
                   width: 40,
                   height: 40,
@@ -74,15 +92,13 @@ export function Footer() {
 
           {/* Quick Links */}
           <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>
-              Liên kết nhanh
-            </Typography>
+            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>Liên kết nhanh</Typography>
             <List disablePadding sx={{ "& li": { py: 0.5 } }}>
               {[
                 { text: "Trang chủ", href: "#home" },
                 { text: "Tính năng", href: "#features" },
-                { text: "Quy trình", href: "#how-it-works" },
-                { text: "Đánh giá", href: "#testimonials" },
+                { text: "Tư vấn nhanh", href: "#quickcareer" },
+                { text: "Khám phá", href: "#assessment" },
               ].map((item) => (
                 <ListItem key={item.text} disablePadding>
                   <Link href={item.href} color="inherit" underline="none" sx={{ "&:hover": { color: amber[400] } }}>
@@ -95,9 +111,7 @@ export function Footer() {
 
           {/* Assessment Info */}
          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>
-              Hệ thống đánh giá
-            </Typography>
+            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>Hệ thống đánh giá</Typography>
             <List disablePadding sx={{ "& li": { py: 0.5 } }}>
               {[
                 "Chế độ Targeted",
@@ -116,9 +130,7 @@ export function Footer() {
 
           {/* Contact Info */}
           <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>
-              Liên hệ
-            </Typography>
+            <Typography variant="h6" sx={{ color: "white", fontWeight: "bold", mb: 2 }}>Liên hệ</Typography>
             <List disablePadding sx={{ "& li": { py: 0.5 } }}>
               <ListItem disablePadding sx={{ alignItems: "flex-start" }}>
                 <ListItemIcon sx={{ minWidth: 32, mt: 0.5 }}>
@@ -149,15 +161,26 @@ export function Footer() {
               © 2026 Career Pathway. Powered by Gemini AI & O*NET Database.
             </Typography>
             <Stack direction="row" spacing={3}>
-              <Link href="#" color="inherit" underline="none" sx={{ "&:hover": { color: amber[400] } }}>
-                Chính sách bảo mật
-              </Link>
-              <Link href="#" color="inherit" underline="none" sx={{ "&:hover": { color: amber[400] } }}>
-                Điều khoản sử dụng
-              </Link>
-              <Link href="#" color="inherit" underline="none" sx={{ "&:hover": { color: amber[400] } }}>
-                Tài liệu API
-              </Link>
+              <Typography
+              onClick={onPrivacy}
+              sx={{ cursor: "pointer" }}
+            >
+              Chính sách bảo mật
+            </Typography>
+
+            <Typography
+              onClick={onGuide}
+              sx={{ cursor: "pointer" }}
+            >
+              Hướng dẫn sử dụng
+            </Typography>
+
+            <Typography
+              onClick={onAbout}
+              sx={{ cursor: "pointer" }}
+            >
+              Giới thiệu hệ thống
+            </Typography>
             </Stack>
           </Stack>
         </Box>

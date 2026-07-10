@@ -1,4 +1,26 @@
-const { NguoiDung: UserProfile, CauHoi: Question } = require('../models');
+const {
+  NguoiDung: UserProfile,
+  CauHoi: Question,
+  DiemHocSinh,
+  DiemNguoiLam,
+  KetQuaDiscoveryHoc,
+  KetQuaDiscoveryLam,
+  KetQuaTargetHoc,
+  KetQuaTargetLam,
+  LichSuTest
+} = require('../models');
+
+const isStudyingHighSchool = (education) => {
+  if (!education) return false;
+  const eduLower = String(education).toLowerCase().trim();
+  if (eduLower.includes("đại học") || eduLower.includes("đi làm") || eduLower.includes("cao đẳng") || eduLower.includes("tốt nghiệp")) {
+    return false;
+  }
+  return eduLower.includes("thpt") ||
+    eduLower.includes("học sinh") ||
+    eduLower.includes("cấp 3") ||
+    eduLower.includes("đang học");
+};
 
 /**
  * Lấy thông tin hồ sơ người dùng
@@ -6,11 +28,18 @@ const { NguoiDung: UserProfile, CauHoi: Question } = require('../models');
  */
 const getProfile = async (userId) => {
     try {
-        const profile = await UserProfile.findOne({ where: { userId } });
+        const profile = await UserProfile.findOne({
+            where: { userId },
+            include: ['StudentScores', 'WorkerScores']
+        });
         if (!profile) {
             return { success: false, message: 'Không tìm thấy hồ sơ người dùng' };
         }
-        return { success: true, profile };
+        const profileJson = profile.toJSON();
+        profileJson.hobby = profile.interests;
+        profileJson.studentScores = profile.StudentScores || null;
+        profileJson.workerScores = profile.WorkerScores || null;
+        return { success: true, profile: profileJson };
     } catch (error) {
         console.error("Lỗi getProfile:", error);
         return { success: false, message: "Lỗi hệ thống khi lấy hồ sơ" };
@@ -18,10 +47,106 @@ const getProfile = async (userId) => {
 };
 
 /**
- * Cập nhật thông tin hồ sơ
+ * Lấy điểm số của người dùng (học sinh hoặc người đi làm)
  * @param {number} userId 
- * @param {object} data - Dữ liệu cần cập nhật (từ req.body)
  */
+const getScores = async (userId) => {
+    try {
+        const profile = await UserProfile.findOne({ where: { userId } });
+        if (!profile) {
+            return { success: false, message: 'Không tìm thấy hồ sơ người dùng' };
+        }
+
+        const isStudent = isStudyingHighSchool(profile.educationLevel);
+        
+        if (isStudent) {
+            const studentScores = await DiemHocSinh.findByPk(profile.id);
+            return { 
+                success: true, 
+                type: 'high_school', 
+                scores: studentScores ? studentScores.toJSON() : null 
+            };
+        } else {
+            const workerScores = await DiemNguoiLam.findByPk(profile.id);
+            return { 
+                success: true, 
+                type: 'university_worker', 
+                scores: workerScores ? workerScores.toJSON() : null 
+            };
+        }
+    } catch (error) {
+        console.error("Lỗi getScores:", error);
+        return { success: false, message: "Lỗi hệ thống khi lấy điểm số" };
+    }
+};
+
+/**
+ * Lưu hoặc cập nhật điểm số của người dùng
+ * @param {number} userId 
+ * @param {object} data - { type: 'high_school' | 'university_worker', scores: {...} }
+ */
+const saveScores = async (userId, data) => {
+    try {
+        const profile = await UserProfile.findOne({ where: { userId } });
+        if (!profile) {
+            return { success: false, message: 'Không tìm thấy hồ sơ người dùng' };
+        }
+
+        const type = data.type || (data.studentScores ? 'high_school' : 'university_worker');
+        const scores = data.scores || data.studentScores || data.workerScores || {};
+        
+        if (type === 'high_school') {
+            const mappedScores = {
+                Toan: scores['Toán'] || scores['Toan'] || null,
+                Van: scores['Văn'] || scores['Van'] || null,
+                Anh: scores['Anh Văn'] || scores['Anh'] || null,
+                Ly: scores['Lý'] || scores['Ly'] || null,
+                Hoa: scores['Hoá'] || scores['Hoa'] || null,
+                Sinh: scores['Sinh'] || null,
+                Su: scores['Lịch sử'] || scores['Sử'] || scores['Su'] || null,
+                Dia: scores['Địa lý'] || scores['Địa'] || scores['Dia'] || null,
+                GDCD: scores['GDCD'] || null,
+            };
+            await DiemHocSinh.upsert({
+                MaND: profile.id,
+                ...mappedScores
+            });
+        } else {
+            const gpaVal = scores['GPA'] ?? scores['gpa'] ?? 0.0;
+            await DiemNguoiLam.upsert({
+                MaND: profile.id,
+                GPA: parseFloat(gpaVal) || 0.0
+            });
+        }
+
+        return { success: true, message: 'Lưu điểm số thành công' };
+    } catch (error) {
+        console.error("Lỗi saveScores:", error);
+        return { success: false, message: "Lỗi hệ thống khi lưu điểm số" };
+    }
+};
+
+/**
+ * Xóa điểm số của người dùng
+ * @param {number} userId 
+ */
+const deleteScores = async (userId) => {
+    try {
+        const profile = await UserProfile.findOne({ where: { userId } });
+        if (!profile) {
+            return { success: false, message: 'Không tìm thấy hồ sơ người dùng' };
+        }
+
+        await DiemHocSinh.destroy({ where: { MaND: profile.id } });
+        await DiemNguoiLam.destroy({ where: { MaND: profile.id } });
+
+        return { success: true, message: 'Xóa điểm số thành công' };
+    } catch (error) {
+        console.error("Lỗi deleteScores:", error);
+        return { success: false, message: "Lỗi hệ thống khi xóa điểm số" };
+    }
+};
+
 const updateProfile = async (userId, data) => {
     try {
         const profile = await UserProfile.findOne({ where: { userId } });
@@ -29,20 +154,140 @@ const updateProfile = async (userId, data) => {
             return { success: false, message: 'Không tìm thấy hồ sơ người dùng' };
         }
 
-        // Chỉ cho phép cập nhật các trường này
-        const allowedFields = ['fullName', 'avatarUrl', 'dateOfBirth', 'bio', 'interests', 'targetJob', 'educationLevel', 'phone'];
+        // Chỉ cho phép cập nhật các trường này của hồ sơ cơ bản
+        const allowedFields = ['fullName', 'age', 'educationLevel', 'studyStatus', 'location', 'interests'];
         for (const field of allowedFields) {
             if (data[field] !== undefined) {
                 profile[field] = data[field];
             }
         }
+        if (data.hobby !== undefined) {
+            profile.interests = data.hobby;
+        }
 
         await profile.save();
-        return { success: true, message: 'Cập nhật hồ sơ thành công', profile };
+
+        // Cập nhật điểm học sinh
+        if (data.studentScores) {
+            const mappedScores = {
+                Toan: data.studentScores['Toán'] || data.studentScores['Toan'] || null,
+                Van: data.studentScores['Văn'] || data.studentScores['Van'] || null,
+                Anh: data.studentScores['Anh Văn'] || data.studentScores['Anh'] || null,
+                Ly: data.studentScores['Lý'] || data.studentScores['Ly'] || null,
+                Hoa: data.studentScores['Hoá'] || data.studentScores['Hoa'] || null,
+                Sinh: data.studentScores['Sinh'] || null,
+                Su: data.studentScores['Lịch sử'] || data.studentScores['Sử'] || data.studentScores['Su'] || null,
+                Dia: data.studentScores['Địa lý'] || data.studentScores['Địa'] || data.studentScores['Dia'] || null,
+                GDCD: data.studentScores['GDCD'] || null,
+            };
+            await DiemHocSinh.upsert({
+                MaND: profile.id,
+                ...mappedScores
+            });
+        }
+        // Cập nhật điểm người đi làm
+        if (data.workerScores) {
+            const gpaVal = data.workerScores['GPA'] ?? data.workerScores['gpa'] ?? 0.0;
+            await DiemNguoiLam.upsert({
+                MaND: profile.id,
+                GPA: parseFloat(gpaVal) || 0.0
+            });
+        }
+
+        // Load lại đầy đủ
+        const updatedProfile = await UserProfile.findOne({
+            where: { userId },
+            include: ['StudentScores', 'WorkerScores']
+        });
+        const profileJson = updatedProfile.toJSON();
+        profileJson.hobby = updatedProfile.interests;
+        profileJson.studentScores = updatedProfile.StudentScores || null;
+        profileJson.workerScores = updatedProfile.WorkerScores || null;
+
+        return { success: true, message: 'Cập nhật hồ sơ thành công', profile: profileJson };
     } catch (error) {
         console.error("Lỗi updateProfile:", error);
         return { success: false, message: "Lỗi hệ thống khi cập nhật hồ sơ" };
     }
+};
+
+const generateCareerMetadata = (careerName) => {
+    const normalized = (careerName || "").toLowerCase();
+    
+    // Mặc định
+    let roadmap = [
+        {
+            stage: "Giai đoạn 1: Xây dựng nền tảng",
+            desc: "Tập trung học tập các kiến thức cơ bản, phát triển tư duy tổng quan và trau dồi khả năng ngoại ngữ (Tiếng Anh giao tiếp/chuyên ngành).",
+            certs: ["Ngoại ngữ (IELTS/TOEIC)", "Tin học văn phòng"]
+        },
+        {
+            stage: "Giai đoạn 2: Phát triển chuyên môn",
+            desc: "Nghiên cứu sâu các môn học/kỹ năng nghiệp vụ chuyên ngành, thực hiện các đề án nhỏ hoặc tham gia câu lạc bộ chuyên môn.",
+            certs: ["Chứng chỉ chuyên môn cơ bản"]
+        },
+        {
+            stage: "Giai đoạn 3: Thực tiễn & Việc làm",
+            desc: "Tìm kiếm cơ hội thực tập, tham gia vào các dự án thực tế tại doanh nghiệp để tích lũy kinh nghiệm thực chiến.",
+            certs: ["Chứng chỉ thực hành chuyên nghiệp"]
+        }
+    ];
+
+    let salaries = [
+        { level: "Mới ra trường / Junior", range: "10 - 15 triệu VNĐ" },
+        { level: "Đã có kinh nghiệm / Mid", range: "18 - 28 triệu VNĐ" },
+        { level: "Quản lý / Senior", range: "35 - 55 triệu VNĐ" }
+    ];
+
+    if (normalized.includes("phần mềm") || normalized.includes("công nghệ thông tin") || normalized.includes("it") || normalized.includes("software") || normalized.includes("computer")) {
+        roadmap = [
+            {
+                stage: "Giai đoạn 1: Tư duy thuật toán & Cơ sở",
+                desc: "Nắm vững cấu trúc dữ liệu, giải thuật, cơ sở dữ liệu SQL/NoSQL và sử dụng thành thạo Git.",
+                certs: ["Git/GitHub Basics", "HackerRank Problem Solving"]
+            },
+            {
+                stage: "Giai đoạn 2: Lập trình chuyên sâu & Framework",
+                desc: "Lựa chọn chuyên ngành (Web/App) phát triển với React, Node.js, Spring Boot hoặc Flutter và làm đồ án thực tế.",
+                certs: ["React/NodeJS Developer Certificate", "Mobile Dev Essentials"]
+            },
+            {
+                stage: "Giai đoạn 3: Hệ thống & Môi trường Cloud",
+                desc: "Thực tập dự án lớn, học về Docker, CI/CD, thiết kế hệ thống chịu tải cao và dịch vụ đám mây Cloud.",
+                certs: ["AWS Cloud Practitioner", "Docker Certified Associate"]
+            }
+        ];
+        salaries = [
+            { level: "Mới tốt nghiệp / Junior", range: "12 - 20 triệu VNĐ" },
+            { level: "Có kinh nghiệm / Mid-level", range: "22 - 35 triệu VNĐ" },
+            { level: "Quản lý / Senior Developer", range: "45 - 75 triệu VNĐ" }
+        ];
+    } else if (normalized.includes("kinh doanh") || normalized.includes("marketing") || normalized.includes("quản trị") || normalized.includes("sales")) {
+        roadmap = [
+            {
+                stage: "Giai đoạn 1: Kiến thức thị trường & Sales",
+                desc: "Học hiểu hành vi khách hàng, nghiên cứu thị trường, rèn luyện kỹ năng giao tiếp và thuyết phục khách hàng.",
+                certs: ["Google Analytics", "Marketing Foundations"]
+            },
+            {
+                stage: "Giai đoạn 2: Quản lý chiến dịch & Phân tích",
+                desc: "Lập kế hoạch marketing, tối ưu hóa ngân sách chiến dịch quảng cáo kỹ thuật số, phân tích chỉ số ROI/KPI.",
+                certs: ["Google Ads Certification", "HubSpot Inbound Marketing"]
+            },
+            {
+                stage: "Giai đoạn 3: Chiến lược kinh doanh & Quản lý",
+                desc: "Lập kế hoạch chiến lược thương hiệu toàn diện, quản lý đội ngũ sales/marketing và đàm phán hợp đồng lớn.",
+                certs: ["Project Management Professional (PMP)", "Advanced Digital Strategy"]
+            }
+        ];
+        salaries = [
+            { level: "Mới tốt nghiệp / Junior", range: "9 - 14 triệu VNĐ" },
+            { level: "Có kinh nghiệm / Mid-level", range: "16 - 25 triệu VNĐ" },
+            { level: "Trưởng phòng / Senior Manager", range: "30 - 50 triệu VNĐ" }
+        ];
+    }
+
+    return { roadmap, salaries };
 };
 
 /**
@@ -61,7 +306,19 @@ const getHistory = async (userId) => {
             return { success: true, history: [] };
         }
 
-        // Lấy thông tin kết quả đánh giá đã lưu trong profile người dùng để gán lại (nếu khớp)
+        const [discHocList, discLamList, targetHocList, targetLamList, testHistoryList] = await Promise.all([
+            KetQuaDiscoveryHoc.findAll({ where: { userId } }),
+            KetQuaDiscoveryLam.findAll({ where: { userId } }),
+            KetQuaTargetHoc.findAll({ where: { userId } }),
+            KetQuaTargetLam.findAll({ where: { userId } }),
+            LichSuTest.findAll({ where: { userId } }),
+        ]);
+
+        const historyMap = {};
+        for (const h of testHistoryList) {
+            historyMap[h.sessionId] = h;
+        }
+
         const profile = await UserProfile.findOne({ where: { userId } });
 
         // Gom nhóm các câu hỏi theo từng sessionId (từng bài test)
@@ -78,6 +335,7 @@ const getHistory = async (userId) => {
 
                 if (q.testType === 'career') {
                     const isTarget = q.testName && q.testName.toLowerCase().includes('khảo sát nghề');
+                    const isStudent = profile ? isStudyingHighSchool(profile.educationLevel) : false;
                     if (isTarget) {
                         mode = 'target';
                         title = 'Mục Tiêu (Target)';
@@ -86,14 +344,14 @@ const getHistory = async (userId) => {
                         details = `Đánh giá mức độ phù hợp với nghề ${targetCareer}.`;
                         recommendedCareer = targetCareer;
                         
-                        if (profile && profile.careerFitResult) {
-                            conclusionReason = profile.careerFitResult.advice || conclusionReason;
-                            if (profile.careerFitResult.roadmap) {
-                                roadmap = profile.careerFitResult.roadmap.map((step, index) => ({
-                                    stage: `Giai đoạn ${index + 1}`,
-                                    desc: step
-                                }));
-                            }
+                        // Lọc theo sessionId để tránh nhầm lẫn giữa các bài test
+                        const sessionLam = targetLamList.filter(item => item.sessionId === q.sessionId);
+                        const sessionHoc = targetHocList.filter(item => item.sessionId === q.sessionId);
+                        
+                        if (sessionLam.length > 0) {
+                            conclusionReason = `Công ty tiêu biểu: ` + sessionLam.map(c => c.companyName).join(', ');
+                        } else if (sessionHoc.length > 0) {
+                            conclusionReason = `Trường đào tạo đề xuất: ` + sessionHoc.map(s => s.schoolName).join(', ');
                         }
                     } else {
                         mode = 'discovery';
@@ -101,12 +359,20 @@ const getHistory = async (userId) => {
                         subtitle = 'Khám phá nghề nghiệp phù hợp';
                         details = 'Bài khảo sát định hướng và gợi ý lĩnh vực phù hợp.';
                         
-                        if (profile && profile.careerFitResult) {
-                            conclusionReason = profile.careerFitResult.advice || conclusionReason;
-                            if (profile.careerFitResult.compatibleCareers && profile.careerFitResult.compatibleCareers.length > 0) {
-                                recommendedCareer = profile.careerFitResult.compatibleCareers[0].career;
-                                subtitle = `Gợi ý: ${recommendedCareer}`;
-                            }
+                        // Lọc theo sessionId
+                        const sessionHoc = discHocList.filter(item => item.sessionId === q.sessionId);
+                        const sessionLam = discLamList.filter(item => item.sessionId === q.sessionId);
+                        
+                        if (sessionHoc.length > 0) {
+                            const uniqueCareers = [...new Set(sessionHoc.map(c => c.careerName))];
+                            recommendedCareer = uniqueCareers.join(', ');
+                            subtitle = `Gợi ý: ${recommendedCareer}`;
+                            conclusionReason = `Các trường đề xuất: ` + [...new Set(sessionHoc.map(s => s.schoolName))].join(', ');
+                        } else if (sessionLam.length > 0) {
+                            const uniqueCareers = [...new Set(sessionLam.map(c => c.careerName))];
+                            recommendedCareer = uniqueCareers.join(', ');
+                            subtitle = `Gợi ý: ${recommendedCareer}`;
+                            conclusionReason = `Ngành nghề đề xuất: ` + recommendedCareer;
                         }
                     }
                 } else {
@@ -115,40 +381,91 @@ const getHistory = async (userId) => {
                         title = 'Sở Thích Holland';
                         subtitle = 'Bài trắc nghiệm RIASEC';
                         details = 'Xác định nhóm sở thích nghề nghiệp trội.';
-                        if (profile && profile.hollandResult) {
-                            conclusionReason = profile.hollandResult.advice || conclusionReason;
-                            if (profile.hollandResult.careerSuggestions) {
-                                recommendedCareer = profile.hollandResult.careerSuggestions.join(', ');
-                            }
-                        }
                     } else if (q.testType === 'personality') {
                         title = 'Tính Cách Big 5';
                         subtitle = 'Đặc điểm hành vi & MBTI';
                         details = 'Phân tích tính cách chủ đạo và xu hướng.';
-                        if (profile && profile.personalityResult) {
-                            conclusionReason = profile.personalityResult.developmentAdvice || conclusionReason;
-                            recommendedCareer = profile.personalityResult.suggestedMBTI || 'Big 5';
-                        }
                     } else if (q.testType === 'cognitive') {
                         title = 'Năng Lực Nhận Thức';
                         subtitle = 'Logic, số học, ngôn ngữ';
                         details = 'Đánh giá khả năng tư duy giải quyết vấn đề.';
-                        if (profile && profile.cognitiveResult) {
-                            conclusionReason = profile.cognitiveResult.improvementSuggestions ? profile.cognitiveResult.improvementSuggestions.join('. ') : conclusionReason;
-                            recommendedCareer = `Điểm: ${profile.cognitiveResult.overallScore}/5`;
-                        }
                     } else if (q.testType === 'values') {
                         title = 'Hệ Giá Trị Cá Nhân';
                         subtitle = 'Động lực nghề nghiệp';
                         details = 'Xác định các giá trị cốt lõi thúc đẩy sự nghiệp.';
-                        if (profile && profile.valuesResult) {
-                            conclusionReason = profile.valuesResult.advice || conclusionReason;
-                            if (profile.valuesResult.topValues) {
-                                recommendedCareer = profile.valuesResult.topValues.join(', ');
-                            }
-                        }
                     }
                 }
+
+                let relevanceScore = null;
+                const dbHistory = historyMap[q.sessionId];
+                const isStudent = profile ? isStudyingHighSchool(profile.educationLevel) : false;
+                if (dbHistory) {
+                    mode = dbHistory.testMode;
+                    if (dbHistory.score != null) {
+                        relevanceScore = dbHistory.score;
+                    }
+                }
+
+                // Xây dựng danh sách trường học và công ty phù hợp
+                let matchingSchools = [];
+                if (mode === 'discovery') {
+                    matchingSchools = discHocList.filter(item => item.sessionId === q.sessionId).map(item => ({
+                        name: item.schoolName,
+                        major: item.careerName,
+                        location: profile?.location || 'Việt Nam',
+                        score: `Điểm chuẩn: ${item.benchmark2025 || item.benchmark2024 || 'N/A'}`,
+                        officialLink: item.officialLink || null,
+                        admissionLink: item.admissionLink || null
+                    }));
+                } else if (mode === 'target') {
+                    matchingSchools = targetHocList.filter(item => item.sessionId === q.sessionId).map(item => ({
+                        name: item.schoolName,
+                        major: item.careerName,
+                        location: profile?.location || 'Việt Nam',
+                        score: `Điểm chuẩn: ${item.benchmark2025 || item.benchmark2024 || 'N/A'}`,
+                        officialLink: item.officialLink || null,
+                        admissionLink: item.admissionLink || null
+                    }));
+                }
+                if (matchingSchools.length === 0) {
+                    matchingSchools = [
+                        { name: "Đại học Bách Khoa", major: recommendedCareer, location: "Hà Nội/TP.HCM", score: "Điểm chuẩn: 25.5", officialLink: null, admissionLink: null },
+                        { name: "Đại học Quốc Gia", major: recommendedCareer, location: "Hà Nội/TP.HCM", score: "Điểm chuẩn: 24.8", officialLink: null, admissionLink: null },
+                        { name: "Đại học RMIT / FPT", major: recommendedCareer, location: "Toàn quốc", score: "Xét tuyển/Học bạ", officialLink: null, admissionLink: null }
+                    ];
+                }
+
+                let hiringCompanies = [];
+                if (mode === 'discovery') {
+                    hiringCompanies = discLamList.filter(item => item.sessionId === q.sessionId).map(item => ({
+                        role: item.careerName,
+                        company: item.companyName || 'Tập đoàn Công nghệ/Dịch vụ',
+                        loc: profile?.location || 'Việt Nam',
+                        type: 'Toàn thời gian',
+                        salary: item.basicSalary || null,
+                        description: item.companyDescription || null,
+                        careerLink: item.careerLink || null
+                    }));
+                } else if (mode === 'target') {
+                    hiringCompanies = targetLamList.filter(item => item.sessionId === q.sessionId).map(item => ({
+                        role: item.careerName,
+                        company: item.companyName,
+                        loc: profile?.location || 'Việt Nam',
+                        type: 'Toàn thời gian',
+                        salary: item.basicSalary || null,
+                        description: item.companyDescription || null,
+                        careerLink: item.careerLink || null
+                    }));
+                }
+                if (hiringCompanies.length === 0) {
+                    hiringCompanies = [
+                        { role: `Chuyên viên ${recommendedCareer}`, company: "FPT Software / Telecom", loc: "Toàn quốc", type: "Toàn thời gian", salary: null, description: null },
+                        { role: `Kỹ sư / Nhân sự ${recommendedCareer}`, company: "Tập đoàn Viettel", loc: "Hà Nội", type: "Toàn thời gian", salary: null, description: null },
+                        { role: `Chuyên gia ${recommendedCareer}`, company: "Các công ty đa quốc gia", loc: "TP. HCM", type: "Toàn thời gian", salary: null, description: null }
+                    ];
+                }
+
+                const meta = generateCareerMetadata(recommendedCareer);
 
                 sessionsMap[q.sessionId] = {
                     sessionId: q.sessionId,
@@ -156,20 +473,44 @@ const getHistory = async (userId) => {
                     title,
                     subtitle,
                     isCompleted: true,
+                    isStudent: isStudent,
+                    educationLevel: profile?.educationLevel || null,
                     createdAt: q.createdAt || q.NgayTao || new Date(),
-                    relevanceScore: null,
+                    relevanceScore,
                     details,
                     recommendedCareer,
                     conclusionReason,
-                    roadmap,
+                    roadmap: meta.roadmap,
+                    matchingSchools: matchingSchools,
+                    marketSalaries: meta.salaries,
+                    hiringCompanies: hiringCompanies,
                     questions: []
                 };
             }
 
-            // Map thuộc tính câu hỏi tương thích với Front-end mong đợi
+            // Xử lý parse options (có thể là JSON string hoặc đã là array tùy cách Sequelize lưu)
+            //sửa ở đây
             sessionsMap[q.sessionId].questions.push({
-                q: q.questionText,
-                a: q.userAnswer || 'Chưa trả lời'
+                questionText: q.questionText, // Đổi tên thuộc tính để nhất quán với frontend
+                answerText: (() => { // Đảm bảo trả về text của câu trả lời
+                    let opts = q.options;
+                    // Đảm bảo opts là một mảng, phân tích cú pháp nếu nó là một chuỗi JSON
+                    if (typeof opts === 'string') {
+                        try {
+                            opts = JSON.parse(opts);
+                        } catch (e) {
+                            console.error("Lỗi khi phân tích cú pháp options từ DB:", e);
+                            opts = []; // Fallback về mảng rỗng nếu phân tích cú pháp thất bại
+                        }
+                    }
+
+                    if (Array.isArray(opts)) {
+                        const matched = opts.find(opt => String(opt.weight) === String(q.userAnswer));
+                        if (matched) return matched.text;
+                        // Có thể thêm logic để tìm theo text nếu cần, nhưng ưu tiên weight
+                    }
+                    return q.userAnswer || 'Chưa trả lời'; // Fallback về giá trị số nếu không tìm thấy
+                })()
             });
 
             if (!q.userAnswer) {
@@ -182,6 +523,9 @@ const getHistory = async (userId) => {
 
         // Tính điểm đánh giá tương thích động dựa trên câu trả lời
         for (const session of history) {
+            if (session.relevanceScore !== null) {
+                continue; // Điểm số đã có từ CSDL
+            }
             const sessionQuestions = questions.filter(q => q.sessionId === session.sessionId);
             
             if (session.isCompleted) {
@@ -239,5 +583,8 @@ const getHistory = async (userId) => {
 module.exports = {
     getProfile,
     updateProfile,
-    getHistory
+    getHistory,
+    getScores,
+    saveScores,
+    deleteScores
 };
