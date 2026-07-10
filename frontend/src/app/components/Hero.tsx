@@ -94,20 +94,12 @@ export function Hero({ onStart }: HeroProps) {
                   endIcon={<ArrowRight />}
                   sx={{
                     bgcolor: "#f59e0b",
-                    "&:hover": { bgcolor: "#ca8a04" },
+                    "&:hover": { bgcolor: "#ca8a04" }, 
                     "& .MuiButton-endIcon": { transition: "transform 0.2s" },
                     "&:hover .MuiButton-endIcon": { transform: "translateX(4px)" },
                   }}
                 >
                   Bắt đầu đánh giá miễn phí
-                </Button>
-                <Button
-                  size="large"
-                  variant="outlined"
-                  startIcon={<Target />}
-                  sx={{ color: "text.secondary", borderColor: "grey.400", "&:hover": { bgcolor: "grey.100", borderColor: "grey.500" } }}
-                >
-                  Tìm hiểu quy trình
                 </Button>
               </Stack>
             </Stack>

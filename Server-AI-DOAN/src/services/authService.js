@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const { Taikhoan: UserAccount, NguoiDung: UserProfile } = require('../models');
+const { getSessionContext } = require('./sessionContextStore');
 
 /**
  * Hàm kiểm tra đăng nhập bằng Username / Password
@@ -37,19 +38,43 @@ const checkLogin = async (username, password) => {
                 where: { userId: user.id },
                 attributes: [
                     'fullName',
-                    //'targetJob',
                     'educationLevel',
-                    'careerFitScore',
-                    'careerFitResult',
                     'interests',
+                    'age',
+                    'studyStatus',
+                    'location',
                 ],
             });
+
+            let profileJson = null;
+            if (profile) {
+                profileJson = {
+                    fullName: profile.fullName,
+                    educationLevel: profile.educationLevel,
+                    interests: profile.interests,
+                    hobby: profile.interests,
+                    age: profile.age,
+                    studyStatus: profile.studyStatus,
+                    location: profile.location,
+                    targetJob: profile.targetJob,
+                    careerFitScore: profile.careerFitScore,
+                    phone: profile.phone,
+                    bio: profile.bio,
+                    dateOfBirth: profile.dateOfBirth,
+                    phone: user.phone, // Lấy từ user (Taikhoan)
+                    bio: profile.bio, // Lấy từ profile
+                    dateOfBirth: profile.dateOfBirth, // Lấy từ profile
+                    // avatarUrl và careerFitResult không có trong model UserProfile, giữ nguyên null hoặc xóa nếu không dùng
+                    avatarUrl: null, 
+                    careerFitResult: null, 
+                };
+            }
 
             return {
                 success: true,
                 message: 'Đăng nhập thành công',
                 user: { id: user.id, email: user.email, role: user.role, isActive: user.isActive },
-                profile: profile ? profile.toJSON() : null,
+                profile: profileJson,
             };
   } catch (error) {
     console.error('Lỗi trong quá trình đăng nhập:', error);
@@ -104,9 +129,7 @@ const socialLogin = async (provider, providerId, email, displayName, avatarUrl) 
       // Tự động tạo một Profile cho user mới
       await UserProfile.create({
         userId: user.id,
-        email: email || '', // Gán email vào email của profile
-        fullName: displayName || '', // Tên đầy đủ từ Google/FB
-        avatarUrl: avatarUrl || '',
+        fullName: displayName || '',
       });
     } else {
       // 4. Nếu đã có tài khoản thì chỉ cập nhật lastLogin
@@ -133,7 +156,7 @@ const socialLogin = async (provider, providerId, email, displayName, avatarUrl) 
  * @param {string} password - Mật khẩu
  * @param {string} fullName - Tên đầy đủ
  */
-const register = async (email, password, fullName) => {
+const register = async (email, password, fullName, sessionId) => {
   try {
     // 1. Kiểm tra xem email đã tồn tại chưa
     const existingUser = await UserAccount.findOne({ where: { email } });
@@ -153,12 +176,20 @@ const register = async (email, password, fullName) => {
       // isEmailVerified: false,
     });
 
+    // Lấy context từ session nếu có
+    const context = sessionId ? getSessionContext(sessionId) : null;
+    const userContext = context?.userContext || {};
+
     // 4. Tạo profile cho user
     await UserProfile.create({
       userId: newUser.id,
-      email: email,
-      fullName: fullName || '',
-      avatarUrl: '',
+      fullName: fullName || userContext.fullName || '',
+      age: userContext.age || null,
+      educationLevel: userContext.education || null,
+      studyStatus: userContext.status || null,
+      location: userContext.location || null,
+      interests: userContext.hobby || null,
+      targetJob: context?.targetCareer || null,
     });
 
     return { 

@@ -26,7 +26,7 @@ interface CTAProps {
 export function CTA({ onStart }: CTAProps) {
   return (
     <Box
-      component="section"
+      component="section" 
       id="assessment"
       sx={{
         py: 10,
@@ -52,7 +52,7 @@ export function CTA({ onStart }: CTAProps) {
 
       <Container maxWidth="lg" sx={{ position: "relative" }}>
         <Grid container spacing={8} alignItems="center">
-          <Grid size={{ xs: 12, sm: 6 }}>
+          <Grid size={{ xs: 12, lg: 6 }}>
             <Stack spacing={3}>
               <Chip
                 icon={<Sparkles sx={{ fontSize: 16, color: amber[400] }} />}
@@ -103,25 +103,18 @@ export function CTA({ onStart }: CTAProps) {
                   endIcon={<ArrowRight />}
                   sx={{
                     bgcolor: "#f59e0b",
-                    "&:hover": { bgcolor: "#ca8a04" },
+                    "&:hover": { bgcolor: "#ca8a04" }, 
                     "& .MuiButton-endIcon": { transition: "transform 0.2s" },
                     "&:hover .MuiButton-endIcon": { transform: "translateX(4px)" },
                   }}
                 >
                   Bắt đầu đánh giá miễn phí
                 </Button>
-                <Button
-                  size="large"
-                  variant="outlined"
-                  sx={{ color: "grey.400", borderColor: "grey.700", "&:hover": { bgcolor: "grey.800", borderColor: "grey.600" } }}
-                >
-                  Tìm hiểu thêm
-                </Button>
               </Stack>
             </Stack>
           </Grid>
 
-          <Grid size={{ xs: 12, sm: 6 }} sx={{ display: { xs: "none", lg: "block" } }}>
+          <Grid size={{ xs: 12, lg: 6 }} sx={{ display: { xs: "none", lg: "block" } }}>
             <Box sx={{ position: "relative" }}>
               <Box sx={{ position: "absolute", top: -16, right: -16, width: "100%", height: "100%", background: "linear-gradient(to bottom right, rgba(245, 158, 11, 0.2), rgba(107, 114, 128, 0.2))", borderRadius: 4, filter: "blur(32px)" }} />
               <Box

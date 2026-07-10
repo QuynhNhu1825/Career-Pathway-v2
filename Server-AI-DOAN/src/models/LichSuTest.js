@@ -1,45 +1,42 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const NgheNghiep = sequelize.define('NgheNghiep', {
-  MaNghe: {
+const LichSuTest = sequelize.define('LichSuTest', {
+  id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true,
   },
-  MaDM: {
+  userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'userId'
   },
-  TenNghe: {
+  sessionId: {
     type: DataTypes.STRING(255),
     allowNull: false,
+    unique: true,
+    field: 'sessionId'
   },
-  Slug: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-  },
-  MoTa: {
-    type: DataTypes.TEXT,
+  testMode: {
+    type: DataTypes.ENUM('discovery', 'target'),
     allowNull: false,
+    field: 'testMode'
   },
-  KyNangCT: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
-  TrangThai: {
-    type: DataTypes.TINYINT,
+  score: {
+    type: DataTypes.FLOAT,
     allowNull: true,
-    defaultValue: 1,
+    field: 'score'
   },
-  NgayTao: {
+  createdAt: {
     type: DataTypes.DATE,
     allowNull: false,
     defaultValue: DataTypes.NOW,
+    field: 'createdAt'
   }
 }, {
-  tableName: 'NgheNghiep',
+  tableName: 'LichSuTest',
   timestamps: false,
 });
 
-module.exports = NgheNghiep;
+module.exports = LichSuTest;

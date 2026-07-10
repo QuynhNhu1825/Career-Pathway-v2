@@ -1,6 +1,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  --font-sans: "Be Vietnam Pro", "Roboto", "Helvetica", "Arial", sans-serif;
   --font-serif: "DM Serif Display", serif;
   --font-mono: "DM Mono", monospace;
 }

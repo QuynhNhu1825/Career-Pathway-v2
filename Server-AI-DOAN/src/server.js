@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { NguoiDung: UserProfile } = require('./models');
+const { NguoiDung: UserProfile, CauHoi: Question } = require('./models');
 
 // Import Services
 const { 
@@ -24,11 +24,13 @@ const { checkLogin, register } = require('./services/authService');
 const { saveQuestions, getQuestions } = require('./services/testService');
 const { getSessionContext, setPendingEvaluation, setSessionContext } = require('./services/sessionContextStore');
 const { claimAssessmentResult } = require('./services/assessmentService');
-const { getProfile, updateProfile, getHistory } = require('./services/profileService');
+const { getProfile, updateProfile, getHistory, getScores, saveScores, deleteScores } = require('./services/profileService');
 
 // Import Routes
 const surveyRoutes = require('./routes/surveyRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const searchRoutes = require('./routes/searchRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Import DB config
 const sequelize = require('./config/database');
@@ -48,12 +50,37 @@ app.use(express.json());
 // Mount Custom API Routes
 app.use('/api/survey', surveyRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 1. Endpoint tư vấn nghề nghiệp tổng quát (POST)
+// Body: { question, userContext: { requestType, targetJob, educationLevel, age, hobby, location } }
+// response: { advice, success, errorMessage }
+//   - success=true  & advice hợp lệ (chuỗi hoặc object) : kết quả AI
+//   - success=false & errorMessage                    : backend gặp lỗi (ví dụ AI hết quota)
 app.post('/api/consult', async (req, res) => {
-  const { info } = req.body;
-  const advice = await getCareerAdvice(info);
-  res.json({ advice });
+  try {
+    const body = req.body || {};
+    const advice = await getCareerAdvice(body);
+
+    if (advice && typeof advice === 'object' && advice.__error) {
+      // Trả về kết quả rỗng cho phía client, kèm success=false để FE biết mà hiển thị lỗi
+      return res.status(503).json({
+        success: false,
+        errorMessage: advice.message || 'Dịch vụ tư vấn AI tạm thời gián đoạn',
+        advice: null
+      });
+    }
+
+    return res.json({ success: true, advice });
+  } catch (error) {
+    console.error("Lỗi /api/consult:", error);
+    return res.status(500).json({
+      success: false,
+      errorMessage: error.message || 'Lỗi máy chủ nội bộ',
+      advice: null
+    });
+  }
 });
 
 // 2. Endpoint tạo bài test chi tiết (POST)
@@ -68,13 +95,13 @@ app.post('/api/generate-test', async (req, res) => {
 
 // 2.5. Endpoint đăng ký tài khoản mới (Email / Password)
 app.post('/api/register', async (req, res) => {
-  const { email, password, fullName } = req.body;
+  const { email, password, fullName, sessionId } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập đủ email và mật khẩu' });
   }
 
-  const result = await register(email, password, fullName);
+  const result = await register(email, password, fullName, sessionId);
   if (result.success) {
     res.status(201).json(result);
   } else {
@@ -90,11 +117,17 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập đủ tài khoản và mật khẩu' });
   }
 
-  const result = await checkLogin(username, password);
-  if (result.success) {
-    res.status(200).json(result);
-  } else {
-    res.status(401).json(result); // Lỗi xác thực
+  try {
+    const result = await checkLogin(username, password);
+    console.log('[Login] result:', JSON.stringify(result));
+    if (result.success) {
+      res.status(200).json(result);
+    } else {
+      res.status(401).json(result); // Lỗi xác thực
+    }
+  } catch (err) {
+    console.error('[Login] Loi:', err);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi đăng nhập: ' + (err.message || 'unknown') });
   }
 });
 
@@ -251,10 +284,28 @@ app.get('/api/history/:userId', async (req, res) => {
   res.status(result.success ? 200 : 500).json(result);
 });
 
+// 12. Endpoint lấy điểm số của người dùng (GET)
+app.get('/api/profile/:userId/scores', async (req, res) => {
+  const result = await getScores(req.params.userId);
+  res.status(result.success ? 200 : 404).json(result);
+});
+
+// 13. Endpoint lưu/cập nhật điểm số của người dùng (POST)
+app.post('/api/profile/:userId/scores', async (req, res) => {
+  const result = await saveScores(req.params.userId, req.body);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+// 14. Endpoint xóa điểm số của người dùng (DELETE)
+app.delete('/api/profile/:userId/scores', async (req, res) => {
+  const result = await deleteScores(req.params.userId);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
 // 12. Endpoint gộp tạo câu hỏi trắc nghiệm (Holland, Personality, Cognitive, Values)
 app.post('/api/test/generate', async (req, res) => {
   try {
-    const { testType } = req.body;
+    const { testType, targetJob, hobby, age, educationLevel } = req.body;
     let test;
     if (testType === 'holland') {
       test = await generateHollandTest(req.body);
@@ -267,7 +318,51 @@ app.post('/api/test/generate', async (req, res) => {
     } else {
       return res.status(400).json({ success: false, message: 'testType không hợp lệ hoặc thiếu' });
     }
-    res.json({ success: true, test });
+
+    if (test && !test.error) {
+      // Tự sinh sessionId duy nhất để đồng bộ với Frontend
+      const sessionId = testType + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+      // Lưu trữ session context
+      setSessionContext(sessionId, { targetJob, hobby, age, educationLevel });
+
+      // Lưu sẵn bộ câu hỏi vào bảng CauHoi (Question) kèm đầy đủ metadata
+      if (Array.isArray(test.questions)) {
+        const questionRecords = test.questions.map((q, index) => {
+          const record = {
+            sessionId,
+            testName: test.testName || 'Bài test hướng nghiệp',
+            testType: testType,
+            questionText: q.question || q.questionText || '', // Use q.questionText for consistency
+            options: (test.options || []).map((text, index) => ({
+              text: text,
+              weight: index + 1 // Assuming Likert scale 1-5 for these tests
+            })),
+            userAnswer: null,
+            order: index + 1
+          };
+
+          if (testType === 'holland' && q.hollandType) {
+            record.hollandType = q.hollandType;
+          } else if (testType === 'personality' && q.trait) {
+            record.trait = q.trait;
+          } else if (testType === 'cognitive') {
+            record.questionType = q.type;
+            record.correctAnswer = q.correctAnswer;
+          } else if (testType === 'values' && q.valueType) {
+            record.valueType = q.valueType;
+          }
+
+          return record;
+        });
+
+        await Question.bulkCreate(questionRecords);
+      }
+
+      res.json({ success: true, sessionId, test });
+    } else {
+      res.status(502).json({ success: false, message: 'Không thể tạo bài test bằng AI', details: test });
+    }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -322,19 +417,7 @@ app.post('/api/assessment/comprehensive/:userId', async (req, res) => {
       return res.status(502).json({ success: false, message: 'AI không trả về kết quả hợp lệ', details: comprehensive });
     }
 
-    // Cập nhật profile với kết quả tổng hợp
-    await userProfile.update({
-      overallCompatibility: comprehensive.overallCompatibility,
-      compatibilityZone: comprehensive.compatibilityZone,
-      pillarScores: comprehensive.pillarScores,
-      comprehensiveSummary: comprehensive.comprehensiveSummary,
-      strengths: comprehensive.strengths,
-      weaknesses: comprehensive.weaknesses,
-      recommendedCareers: comprehensive.recommendedCareers,
-      skillDevelopment: comprehensive.skillDevelopment,
-      workEnvironment: comprehensive.workEnvironment,
-      careerAdvice: comprehensive.careerAdvice
-    });
+    // Không cập nhật profile vì các cột này đã được loại bỏ khỏi bảng nguoidung ở DB mới
 
     res.json({
       success: true,
@@ -378,9 +461,7 @@ app.listen(PORT, async () => {
       });
       await NguoiDung.create({
         userId: user.id,
-        email: email,
         fullName: 'Phong Điền',
-        targetJob: 'Lập trình viên',
         educationLevel: 'Đại học',
         interests: 'Đọc sách, Công nghệ'
       });

@@ -3,15 +3,15 @@ const sequelize = require('../config/database');
 const Taikhoan = require('./Taikhoan');
 const NguoiDung = require('./NguoiDung');
 const CauHoi = require('./CauHoi');
-const KetQua = require('./KetQua');
-const Chatbox = require('./Chatbox');
 const Prompt = require('./Prompt');
-const DanhMucNganh = require('./DanhMucNganh');
-const NgheNghiep = require('./NgheNghiep');
-const GoiYNgheNghiep = require('./GoiYNgheNghiep');
-const LoTrinhNgheNghiep = require('./LoTrinhNgheNghiep');
-const DuLieuThiTruong = require('./DuLieuThiTruong');
-const SurveyFeedback = require('./SurveyFeedback'); // Keep existing model for api support
+const SurveyFeedback = require('./SurveyFeedback');
+const KetQuaDiscoveryHoc = require('./KetQuaDiscoveryHoc');
+const KetQuaDiscoveryLam = require('./KetQuaDiscoveryLam');
+const KetQuaTargetHoc = require('./KetQuaTargetHoc');
+const KetQuaTargetLam = require('./KetQuaTargetLam');
+const DiemHocSinh = require('./DiemHocSinh');
+const DiemNguoiLam = require('./DiemNguoiLam');
+const LichSuTest = require('./LichSuTest');
 
 // Define Associations
 
@@ -19,54 +19,62 @@ const SurveyFeedback = require('./SurveyFeedback'); // Keep existing model for a
 Taikhoan.hasOne(NguoiDung, { foreignKey: 'userId', as: 'Profile' });
 NguoiDung.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// NguoiDung <-> Chatbox (1-n)
-NguoiDung.hasMany(Chatbox, { foreignKey: 'MaND', as: 'Messages' });
-Chatbox.belongsTo(NguoiDung, { foreignKey: 'MaND', as: 'User' });
+// NguoiDung <-> DiemHocSinh (1-1)
+NguoiDung.hasOne(DiemHocSinh, { foreignKey: 'MaND', as: 'StudentScores' });
+DiemHocSinh.belongsTo(NguoiDung, { foreignKey: 'MaND', as: 'Profile' });
 
-// NguoiDung <-> KetQua (1-n)
-NguoiDung.hasMany(KetQua, { foreignKey: 'MaND', as: 'Results' });
-KetQua.belongsTo(NguoiDung, { foreignKey: 'MaND', as: 'User' });
+// NguoiDung <-> DiemNguoiLam (1-1)
+NguoiDung.hasOne(DiemNguoiLam, { foreignKey: 'MaND', as: 'WorkerScores' });
+DiemNguoiLam.belongsTo(NguoiDung, { foreignKey: 'MaND', as: 'Profile' });
 
-// CauHoi <-> KetQua (1-n)
-CauHoi.hasMany(KetQua, { foreignKey: 'MaCH', as: 'Results' });
-KetQua.belongsTo(CauHoi, { foreignKey: 'MaCH', as: 'Question' });
+// Taikhoan <-> KetQuaDiscoveryHoc (1-n)
+Taikhoan.hasMany(KetQuaDiscoveryHoc, { foreignKey: 'userId', as: 'DiscoveryHocResults' });
+KetQuaDiscoveryHoc.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// DanhMucNganh <-> NgheNghiep (1-n)
-DanhMucNganh.hasMany(NgheNghiep, { foreignKey: 'MaDM', as: 'Careers' });
-NgheNghiep.belongsTo(DanhMucNganh, { foreignKey: 'MaDM', as: 'Category' });
+// Taikhoan <-> KetQuaDiscoveryLam (1-n)
+Taikhoan.hasMany(KetQuaDiscoveryLam, { foreignKey: 'userId', as: 'DiscoveryLamResults' });
+KetQuaDiscoveryLam.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// NgheNghiep <-> GoiYNgheNghiep (1-n)
-NgheNghiep.hasMany(GoiYNgheNghiep, { foreignKey: 'MaNghe', as: 'Recommendations' });
-GoiYNgheNghiep.belongsTo(NgheNghiep, { foreignKey: 'MaNghe', as: 'Career' });
+// Taikhoan <-> KetQuaTargetHoc (1-n)
+Taikhoan.hasMany(KetQuaTargetHoc, { foreignKey: 'userId', as: 'TargetHocResults' });
+KetQuaTargetHoc.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// NgheNghiep <-> LoTrinhNgheNghiep (1-n)
-NgheNghiep.hasMany(LoTrinhNgheNghiep, { foreignKey: 'MaNganh', as: 'Roadmaps' });
-LoTrinhNgheNghiep.belongsTo(NgheNghiep, { foreignKey: 'MaNganh', as: 'Career' });
+// Taikhoan <-> KetQuaTargetLam (1-n)
+Taikhoan.hasMany(KetQuaTargetLam, { foreignKey: 'userId', as: 'TargetLamResults' });
+KetQuaTargetLam.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// NgheNghiep <-> DuLieuThiTruong (1-n)
-NgheNghiep.hasMany(DuLieuThiTruong, { foreignKey: 'MaNghe', as: 'MarketData' });
-DuLieuThiTruong.belongsTo(NgheNghiep, { foreignKey: 'MaNghe', as: 'Career' });
+// Taikhoan <-> LichSuTest (1-n)
+Taikhoan.hasMany(LichSuTest, { foreignKey: 'userId', as: 'TestHistories' });
+LichSuTest.belongsTo(Taikhoan, { foreignKey: 'userId', as: 'Account' });
 
-// KetQua <-> GoiYNgheNghiep (1-n)
-KetQua.hasMany(GoiYNgheNghiep, { foreignKey: 'MaKQ', as: 'Recommendations' });
-GoiYNgheNghiep.belongsTo(KetQua, { foreignKey: 'MaKQ', as: 'Result' });
+// LichSuTest <-> KetQuaDiscoveryHoc (1-n)
+LichSuTest.hasMany(KetQuaDiscoveryHoc, { foreignKey: 'sessionId', sourceKey: 'sessionId', as: 'DiscoveryHocDetails' });
+KetQuaDiscoveryHoc.belongsTo(LichSuTest, { foreignKey: 'sessionId', targetKey: 'sessionId', as: 'TestHistory' });
 
-// KetQua <-> LoTrinhNgheNghiep (1-n)
-KetQua.hasMany(LoTrinhNgheNghiep, { foreignKey: 'MaKQ', as: 'Roadmaps' });
-LoTrinhNgheNghiep.belongsTo(KetQua, { foreignKey: 'MaKQ', as: 'Result' });
+// LichSuTest <-> KetQuaDiscoveryLam (1-n)
+LichSuTest.hasMany(KetQuaDiscoveryLam, { foreignKey: 'sessionId', sourceKey: 'sessionId', as: 'DiscoveryLamDetails' });
+KetQuaDiscoveryLam.belongsTo(LichSuTest, { foreignKey: 'sessionId', targetKey: 'sessionId', as: 'TestHistory' });
+
+// LichSuTest <-> KetQuaTargetHoc (1-n)
+LichSuTest.hasMany(KetQuaTargetHoc, { foreignKey: 'sessionId', sourceKey: 'sessionId', as: 'TargetHocDetails' });
+KetQuaTargetHoc.belongsTo(LichSuTest, { foreignKey: 'sessionId', targetKey: 'sessionId', as: 'TestHistory' });
+
+// LichSuTest <-> KetQuaTargetLam (1-n)
+LichSuTest.hasMany(KetQuaTargetLam, { foreignKey: 'sessionId', sourceKey: 'sessionId', as: 'TargetLamDetails' });
+KetQuaTargetLam.belongsTo(LichSuTest, { foreignKey: 'sessionId', targetKey: 'sessionId', as: 'TestHistory' });
 
 module.exports = {
   sequelize,
   Taikhoan,
   NguoiDung,
   CauHoi,
-  KetQua,
-  Chatbox,
   Prompt,
-  DanhMucNganh,
-  NgheNghiep,
-  GoiYNgheNghiep,
-  LoTrinhNgheNghiep,
-  DuLieuThiTruong,
   SurveyFeedback,
+  KetQuaDiscoveryHoc,
+  KetQuaDiscoveryLam,
+  KetQuaTargetHoc,
+  KetQuaTargetLam,
+  DiemHocSinh,
+  DiemNguoiLam,
+  LichSuTest,
 };

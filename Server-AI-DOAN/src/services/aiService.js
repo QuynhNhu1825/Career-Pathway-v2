@@ -1,35 +1,40 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { getGenerativeModelWithFallback } = require("./geminiClient");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-lite", // Model nhanh hơn
+const model = getGenerativeModelWithFallback({
+    model: "gemini-2.5-flash", // Default model, falls back to others on error
     generationConfig: {
         temperature: 0.5, // Giảm randomness để response nhanh hơn
-        maxOutputTokens: 1024, // Giới hạn output để nhanh hơn
-        // Bỏ responseMimeType JSON để tăng tốc
+        maxOutputTokens: 4096, // Tăng giới hạn output để tránh bị cắt cụt JSON
     }
 });
-
-// Ghi đè phương thức generateContent để tự động retry khi gặp lỗi (ví dụ lỗi 503 hoặc rate limit)
-const originalGenerateContent = model.generateContent.bind(model);
-model.generateContent = async function (prompt, retries = 3, delayMs = 1500) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            return await originalGenerateContent(prompt);
-        } catch (error) {
-            console.warn(`[Gemini API] Thử lại lần ${attempt}/${retries} do lỗi:`, error.message || error);
-            if (attempt === retries) {
-                throw error;
-            }
-            // Chờ với thời gian tăng dần (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, delayMs * attempt));
-        }
-    }
-};
 
 // Simple cache để tránh gọi API trùng lặp
 const responseCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
+/**
+ * Chuyển lỗi thô từ Gemini thành thông điệp thân thiện với người dùng cuối.
+ * Phân biệt 3 loại:
+ *   - Timeout khi đang chờ quota -> "đang chờ quota được khôi phục"
+ *   - 429 / Quota exceeded     -> "API miễn phí đã hết hạn mức hôm nay" + RetryInfo
+ *   - Lỗi khác                 -> giữ nguyên message gốc hoặc fallback mặc định
+ */
+function friendlyAiError(error) {
+    const rawMessage = (error && error.message) || '';
+    if (rawMessage.includes('AI request timeout')) {
+        return 'Hệ thống đang chờ quota Gemini được khôi phục. Vui lòng thử lại sau ít phút hoặc vào ngày mai.';
+    }
+    if (rawMessage.includes('429') ||
+        rawMessage.includes('Quota exceeded') ||
+        rawMessage.includes('Too Many Requests')) {
+        const retryMatch = rawMessage.match(/retry in\s+([\d.]+)\s*s/i);
+        const waitHint = retryMatch
+            ? ` Vui lòng đợi khoảng ${Math.ceil(parseFloat(retryMatch[1]))} giây rồi thử lại.`
+            : ' Vui lòng thử lại sau ít phút.';
+        return 'API Gemini miễn phí đã hết hạn mức hôm nay.' + waitHint;
+    }
+    return rawMessage || 'Dịch vụ tư vấn AI tạm thời gián đoạn. Vui lòng thử lại sau!';
+}
 
 function getCacheKey(functionName, input) {
     return `${functionName}_${JSON.stringify(input)}`;
@@ -48,8 +53,8 @@ function setCachedResponse(key, data) {
     responseCache.set(key, { data, timestamp: Date.now() });
 }
 
-// Timeout cho API calls (30 giây)
-const API_TIMEOUT = 30000;
+// Timeout cho API calls (90 giây — đủ dài để chờ 1 lần RetryInfo của Gemini ~45s và thử model khác)
+const API_TIMEOUT = 90000;
 
 /** Thang mức độ phù hợp / cảm xúc với từng khía cạnh nghề — thứ tự: thấp → cao (điểm tương ứng 1–5). */
 const CAREER_FIT_LIKERT_OPTIONS = [
@@ -161,6 +166,11 @@ function extractJsonFromText(text) {
 
 /**
  * Tư vấn nghề nghiệp tổng quát
+ *
+ * Hỗ trợ 3 chế độ:
+ *  - requestType = 'HOC' : trả về JSON { summary, schools[] } - danh sách trường đào tạo
+ *  - requestType = 'LAM' : trả về JSON { summary, companies[] } - danh sách công ty tuyển dụng
+ *  - mặc định          : trả về lời tư vấn dạng văn bản tự do
  */
 async function getCareerAdvice(info) {
     const cacheKey = getCacheKey('getCareerAdvice', info);
@@ -170,6 +180,10 @@ async function getCareerAdvice(info) {
     try {
         const query = info && info.question ? info.question : (typeof info === 'string' ? info : JSON.stringify(info));
         const context = (info && info.userContext) || {};
+
+        if (context.requestType === 'HOC' || context.requestType === 'LAM') {
+            return await getCareerAdviceStructured(query, context);
+        }
 
         const contextStr = [
             context.educationLevel && `Học vấn: ${context.educationLevel}`,
@@ -202,8 +216,126 @@ Yêu cầu tư vấn:
         return advice;
     } catch (error) {
         console.error("Lỗi AI (Advice):", error);
-        return "Xin lỗi, mình đang bận một chút, thử lại sau nhé!";
+        // Trả về object đặc biệt __error để /api/consult biết mà trả success=false
+        return {
+            __error: true,
+            message: friendlyAiError(error),
+        };
     }
+}
+
+/**
+ * Tạo lời tư vấn hướng nghiệp nhanh dạng cấu trúc (JSON):
+ *  - requestType = 'HOC' : danh sách trường đào tạo (kèm điểm chuẩn, link trường & link tuyển sinh)
+ *  - requestType = 'LAM' : danh sách công ty tuyển dụng (kèm mô tả, vị trí & link)
+ */
+async function getCareerAdviceStructured(query, context = {}) {
+    const requestType = context.requestType;
+    const location = context.location || 'Việt Nam';
+    const career = (query || '').trim() || context.targetJob || 'ngành nghề';
+
+    if (requestType === 'HOC') {
+        const prompt = `Bạn là chuyên gia tư vấn hướng nghiệp xuất sắc về GIÁO DỤC ĐẠI HỌC/CAO ĐẲNG tại Việt Nam.
+Người dùng muốn hỏi: "${career}".
+
+NHIỆM VỤ: Gợi ý danh sách các trường Đại học/Cao đẳng tại Việt Nam có đào tạo ngành "${career}" (ưu tiên khu vực "${location}", nếu không có thì mở rộng toàn quốc).
+
+QUY TẮC BẮT BUỘC:
+1. Chỉ trả về JSON hợp lệ, KHÔNG kèm markdown, KHÔNG giải thích thêm.
+2. Cung cấp ĐÚNG từ 4 đến 6 trường.
+3. Mỗi trường PHẢI có đầy đủ: schoolName, major (tên ngành), location (tỉnh/thành phố), description (mô tả ngắn 1-2 câu về điểm mạnh đào tạo ngành này), benchmarks (chuỗi mô tả điểm chuẩn 3 năm gần nhất 2025/2024/2023, ví dụ "2025: 26.5 - 2024: 25.0 - 2023: 24.0"), officialLink (URL trang chủ), admissionLink (URL cổng tuyển sinh).
+4. Nếu không chắc chắn điểm chuẩn chính xác thì đặt "Đang cập nhật".
+5. BẮT BUỘC trả về JSON theo cấu trúc:
+{
+  "summary": "Tóm tắt ngắn 2-3 câu về ngành ${career} và triển vọng học tập tại Việt Nam.",
+  "schools": [
+    {
+      "schoolName": "Tên trường",
+      "major": "Tên ngành đào tạo",
+      "location": "Tỉnh/Thành phố",
+      "description": "Mô tả ngắn gọn...",
+      "benchmarks": "Điểm chuẩn 3 năm gần nhất",
+      "officialLink": "https://...",
+      "admissionLink": "https://..."
+    }
+  ]
+}
+Chỉ trả về JSON.`;
+
+        try {
+            const result = await Promise.race([
+                model.generateContent(prompt),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('AI request timeout')), API_TIMEOUT)
+                )
+            ]);
+            const response = await result.response;
+            const text = response.text().trim();
+            const parsed = extractJsonFromText(text);
+            if (parsed && Array.isArray(parsed.schools) && parsed.schools.length > 0) {
+                return parsed;
+            }
+            return { __error: true, message: 'AI không trả về JSON hợp lệ cho danh sách trường.' };
+        } catch (error) {
+            console.error("Lỗi AI (Advice Structured - HOC):", error);
+            return {
+                __error: true,
+                message: friendlyAiError(error),
+            };
+        }
+    }
+
+    if (requestType === 'LAM') {
+        const prompt = `Bạn là chuyên gia tư vấn hướng nghiệp và nhân sự xuất sắc tại Việt Nam.
+Người dùng muốn hỏi về CƠ HỘI VIỆC LÀM cho ngành: "${career}".
+
+NHIỆM VỤ: Gợi ý danh sách các CÔNG TY/DOANH NGHIỆP tiêu biểu đang có nhu cầu tuyển dụng ngành "${career}" (ưu tiên khu vực "${location}", nếu không có thì mở rộng toàn quốc).
+
+QUY TẮC BẮT BUỘC:
+1. Chỉ trả về JSON hợp lệ, KHÔNG kèm markdown, KHÔNG giải thích thêm.
+2. Cung cấp ĐÚNG từ 4 đến 6 công ty.
+3. Mỗi công ty PHẢI có đầy đủ: companyName, industry (lĩnh vực), location (trụ sở chính), description (mô tả ngắn 1-2 câu về quy mô & môi trường), positions (chuỗi liệt kê các vị trí thường tuyển, ví dụ: "Lập trình viên Frontend, Kỹ sư Backend, BrSE"), careerLink (URL trang tuyển dụng hoặc trang chủ), demandLevel (mức độ tuyển dụng hiện tại: "Cao" / "Trung bình" / "Đang tuyển").
+4. BẮT BUỘC trả về JSON theo cấu trúc:
+{
+  "summary": "Tóm tắt ngắn 2-3 câu về cơ hội việc làm ngành ${career} tại Việt Nam.",
+  "companies": [
+    {
+      "companyName": "Tên công ty",
+      "industry": "Lĩnh vực hoạt động",
+      "location": "Tỉnh/Thành phố",
+      "description": "Mô tả ngắn gọn...",
+      "positions": "Các vị trí tuyển dụng",
+      "careerLink": "https://...",
+      "demandLevel": "Cao"
+    }
+  ]
+}
+Chỉ trả về JSON.`;
+
+        try {
+            const result = await Promise.race([
+                model.generateContent(prompt),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('AI request timeout')), API_TIMEOUT)
+                )
+            ]);
+            const response = await result.response;
+            const text = response.text().trim();
+            const parsed = extractJsonFromText(text);
+            if (parsed && Array.isArray(parsed.companies) && parsed.companies.length > 0) {
+                return parsed;
+            }
+            return { __error: true, message: 'AI không trả về JSON hợp lệ cho danh sách công ty.' };
+        } catch (error) {
+            console.error("Lỗi AI (Advice Structured - LAM):", error);
+            return {
+                __error: true,
+                message: friendlyAiError(error),
+            };
+        }
+    }
+
+    return { __error: true, message: 'Chế độ tư vấn không hợp lệ.' };
 }
 
 /**
@@ -307,7 +439,43 @@ async function evaluateCareerTest(testName, questions, userContext = {}) {
             ctx.educationLevel && `Education: ${ctx.educationLevel}`,
             ctx.hobby && `Hobby: ${ctx.hobby}`,
             ctx.age && `Age: ${ctx.age}`,
+            ctx.status && `Status: ${ctx.status === 'student' ? 'Học sinh THCS/THPT' : 'Sinh viên/Người đi làm'}`
         ].filter(Boolean).join(', ');
+
+        const isStudent = ctx.status === 'student';
+
+        const studentJsonFormat = `{
+  "score": 1-5 (decimal 0.5 steps),
+  "summary": "Phân tích ngắn gọn cho học sinh, tập trung vào tiềm năng và định hướng.",
+  "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
+  "weaknesses": ["Điểm yếu cần cải thiện 1", "Điểm yếu cần cải thiện 2"],
+  "advice": "Lời khuyên cụ thể cho học sinh để chuẩn bị cho ngành này.",
+  "trainingInstitutions": [
+    {
+      "schoolName": "Tên trường đại học/cao đẳng hàng đầu",
+      "description": "Mô tả ngắn về điểm nổi bật của trường liên quan đến ngành này.",
+      "benchmarkScores": "Điểm chuẩn 3 năm gần nhất (ví dụ: 2023: 25.5, 2022: 25.0, 2021: 24.5)",
+      "officialLink": "URL trang chủ của trường",
+      "admissionLink": "URL trang tuyển sinh của trường"
+    }
+  ]
+}`;
+
+        const workingJsonFormat = `{
+  "score": 1-5 (decimal 0.5 steps),
+  "summary": "Phân tích ngắn gọn cho sinh viên/người đi làm, tập trung vào phát triển sự nghiệp.",
+  "strengths": ["Điểm mạnh 1", "Điểm mạnh 2"],
+  "weaknesses": ["Điểm yếu cần cải thiện 1", "Điểm yếu cần cải thiện 2"],
+  "advice": "Lời khuyên cụ thể để thăng tiến trong ngành này.",
+  "roadmap": [
+    "Giai đoạn 1: Học các kiến thức nền tảng về ngành.",
+    "Giai đoạn 2: Xây dựng 1-2 dự án cá nhân để áp dụng kiến thức.",
+    "Giai đoạn 3: Tìm hiểu và thi các chứng chỉ cơ bản."
+  ],
+  "certificates": ["Chứng chỉ A", "Chứng chỉ B"],
+  "basicSalary": "Mức lương khởi điểm cho vị trí Junior dao động từ 10-15 triệu VNĐ/tháng.",
+  "laborMarket": "Nhu cầu nhân lực cho ngành này đang tăng trưởng mạnh, đặc biệt ở các thành phố lớn."
+}`;
 
         const prompt = `Đánh giá phù hợp nghề cho "${testName}".
 
@@ -316,14 +484,14 @@ Profile: ${profile || "N/A"}
 Answers:
 ${qaList}
 
-Return JSON:
-{
-  "score": 1-5 (decimal 0.5 steps),
-  "summary": "Brief 2-3 sentence analysis",
-  "strengths": ["point1", "point2"],
-  "weaknesses": ["point1", "point2"],
-  "advice": "Final advice"
-}`;
+DỰA VÀO TRƯỜNG "Status" TRONG PROFILE, HÃY CHỌN 1 TRONG 2 ĐỊNH DẠNG JSON SAU ĐỂ TRẢ VỀ.
+
+1. Nếu Status là "Học sinh THCS/THPT", trả về JSON theo định dạng sau:
+${studentJsonFormat}
+
+2. Nếu Status là "Sinh viên/Người đi làm", trả về JSON theo định dạng sau:
+${workingJsonFormat}
+`;
 
         const result = await Promise.race([
             model.generateContent(prompt),

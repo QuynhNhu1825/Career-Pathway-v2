@@ -4,8 +4,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from "recharts";
-import SaveIcon from "@mui/icons-material/Save";
-import Edit from "@mui/icons-material/Edit";
 import {
   AppBar,
   Avatar,
@@ -43,6 +41,8 @@ import {
   TextField,
   Toolbar,
   Typography,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
 import {
   Person,
@@ -57,16 +57,16 @@ import {
   EmojiEvents as Award,
   AttachMoney as DollarSign,
   Work as Briefcase,
-  CheckCircle,
   Check,
   BarChart as BarChart2,
-  Edit as Pencil,
+  Edit,
   Save,
   Explore as Compass,
-  TrackChanges as Target,
   TrendingUp,
+  TrackChanges as Target
 } from "@mui/icons-material";
-import { amber, blue, green, purple, red } from "@mui/material/colors";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface DashboardProps {
   authUser: AuthUser;
@@ -78,227 +78,311 @@ interface DashboardProps {
 
 type TabKey = "profile" | "history";
 
-/* ── Static data ─────────────────────────────────────────── */
-
 interface TestEntry {
   id: number;
-  date: string;
-  career: string;
-  match: number;
-  type: string;
-  scores: Record<string, number>;
-}
-
-const testHistory: TestEntry[] = [
-    {
-        id: 4, date: "Tháng 1/2025", career: "Kỹ sư phần mềm", match: 84, type: "Targeted",
-        scores: { "Tư duy phân tích": 84, "Sáng tạo": 72, "Giao tiếp": 68, "Tổ chức": 80, "Kỹ thuật": 82, "Lãnh đạo": 74 },
-    },
-    {
-        id: 3, date: "Tháng 11/2024", career: "Quản lý dự án", match: 65, type: "Targeted",
-        scores: { "Tư duy phân tích": 68, "Sáng tạo": 52, "Giao tiếp": 72, "Tổ chức": 82, "Kỹ thuật": 55, "Lãnh đạo": 75 },
-    },
-    {
-        id: 2, date: "Tháng 7/2024", career: "Bài test tính cách", match: 72, type: "Discovery",
-        scores: { "Tư duy phân tích": 60, "Sáng tạo": 78, "Giao tiếp": 65, "Tổ chức": 70, "Kỹ thuật": 65, "Lãnh đạo": 58 },
-    },
-    {
-        id: 1, date: "Tháng 3/2024", career: "Kỹ sư phần mềm", match: 68, type: "Targeted",
-        scores: { "Tư duy phân tích": 65, "Sáng tạo": 55, "Giao tiếp": 52, "Tổ chức": 68, "Kỹ thuật": 62, "Lãnh đạo": 50 },
-    },
-];
-
-const DIMENSIONS = ["Tư duy phân tích", "Sáng tạo", "Giao tiếp", "Tổ chức", "Kỹ thuật", "Lãnh đạo"];
-
-interface SkillPhase {
-  phase: string;
-  month: string;
+  userId: number;
+  sessionId: string;
+  mode: "discovery" | "target" | "holland" | "personality" | "cognitive" | "values";
+  relevanceScore: number | null;
+  createdAt: string;
   title: string;
-  tasks: string[];
-  initialDone: boolean;
-}
-
-const skillPhases: SkillPhase[] = [
-  { phase: "p0", month: "Tháng 1–2", title: "Nền tảng", tasks: ["Hoàn thành khóa học cơ bản", "Lập tài khoản GitHub/Portfolio"], initialDone: true },
-  { phase: "p1", month: "Tháng 3–4", title: "Dự án đầu tiên", tasks: ["Xây dựng 1 dự án thực tế", "Tham gia hackathon hoặc cộng đồng"], initialDone: true },
-  { phase: "p2", month: "Tháng 5–6", title: "Chứng chỉ", tasks: ["Lấy chứng chỉ cơ bản ngành", "Mở rộng network LinkedIn +20 người"], initialDone: false },
-  { phase: "p3", month: "Tháng 7–9", title: "Kinh nghiệm thực tế", tasks: ["Tìm thực tập hoặc freelance", "Hoàn thiện 2–3 dự án portfolio"], initialDone: false },
-  { phase: "p4", month: "Tháng 10–12", title: "Tìm việc", tasks: ["Ứng tuyển 15–20 vị trí phù hợp", "Chuẩn bị phỏng vấn chuyên sâu"], initialDone: false },
-];
-
-function buildInitialChecked(): Record<string, boolean> {
-  const state: Record<string, boolean> = {};
-  skillPhases.forEach(({ phase, tasks, initialDone }) => {
-    tasks.forEach((_, i) => { state[`${phase}-${i}`] = initialDone; });
-  });
-  return state;
-}
-
-const marketData = {
-  certifications: [
-    { name: "AWS Solutions Architect", provider: "Amazon", level: "Associate", priority: "Cao" },
-    { name: "Google Cloud Professional", provider: "Google", level: "Professional", priority: "Cao" },
-    { name: "PMP Certification", provider: "PMI", level: "Professional", priority: "Trung bình" },
-    { name: "Docker & Kubernetes", provider: "CNCF", level: "Associate", priority: "Trung bình" },
-  ],
-  salaryRanges: [
-    { level: "Intern", min: 3, max: 6 },
-    { level: "Junior (0–2 năm)", min: 8, max: 18 },
-    { level: "Mid-level (2–5 năm)", min: 18, max: 35 },
-    { level: "Senior (5+ năm)", min: 35, max: 80 },
-    { level: "Tech Lead / Manager", min: 50, max: 120 },
-  ],
-  jobs: [
-    { company: "VNG Corporation", position: "Senior Engineer", location: "TP.HCM", type: "Toàn thời gian" },
-    { company: "Tiki", position: "Software Engineer", location: "Hà Nội", type: "Hybrid" },
-    { company: "MoMo", position: "Backend Developer", location: "TP.HCM", type: "Toàn thời gian" },
-    { company: "FPT Software", position: "Tech Lead", location: "Đà Nẵng", type: "Toàn thời gian" },
-  ],
-};
-
-interface ChatMessage { id: number; role: "user" | "ai"; text: string; }
-
-const aiReplies = [
-  "Dựa trên hồ sơ của bạn, tôi thấy bạn có tiềm năng lớn. Hãy tiếp tục phát triển kỹ năng kỹ thuật nhé!",
-  "Theo xu hướng thị trường 2025, ngành bạn đang theo đuổi có nhu cầu tăng trưởng rất mạnh — khoảng 30% so với năm ngoái.",
-  "Gợi ý: Bạn nên tập trung vào 1 chứng chỉ quan trọng trong 3 tháng tới. Hỏi tôi nếu cần tư vấn cụ thể!",
-  "Điểm mạnh của bạn là tư duy phân tích — đây là lợi thế cạnh tranh rất lớn trong ngành bạn chọn.",
-  "Bạn có muốn tôi đề xuất lộ trình học cụ thể dựa trên mục tiêu của bạn không?",
-];
-
-/* ── Comparison radar data builder ───────────────────────── */
-
-function buildComparisonRadar(a: TestEntry, b: TestEntry) {
-  return DIMENSIONS.map((dim) => ({
-    subject: dim,
-    [a.career + " (" + a.date + ")"]: a.scores[dim] ?? 0,
-    [b.career + " (" + b.date + ")"]: b.scores[dim] ?? 0,
-    fullMark: 100,
-  }));
+  date: string;
+  type: string;
+  [key: string]: any;
 }
 
 const educationOptions = [
-    { value: "thpt", label: "THPT (Lớp 12)" },
-    { value: "trungcap", label: "Trung cấp / Cao đẳng" },
-    { value: "daihoc", label: "Đại học" },
-    { value: "thacsi", label: "Thạc sĩ" },
-    { value: "tiensi", label: "Tiến sĩ / Sau đại học" },
+  { value: "thpt", label: "THPT" },
+  { value: "caodang", label: "Cao đẳng" },
+  { value: "daihoc", label: "Đại học" },
+  { value: "khac", label: "Khác" },
 ];
 
-const statusOptions = [
-    { value: "studying", label: "Đang học" },
-    { value: "working", label: "Đi làm" },
-    { value: "switching", label: "Đang chuyển nghề" },
-    { value: "searching", label: "Đang tìm việc" },
+const locationOptions = [
+  { value: "an_giang", label: "An Giang" },
+  { value: "ba_ria_vung_tau", label: "Bà Rịa - Vũng Tàu" },
+  { value: "bac_giang", label: "Bắc Giang" },
+  { value: "bac_kan", label: "Bắc Kạn" },
+  { value: "bac_lieu", label: "Bạc Liêu" },
+  { value: "bac_ninh", label: "Bắc Ninh" },
+  { value: "ben_tre", label: "Bến Tre" },
+  { value: "binh_dinh", label: "Bình Định" },
+  { value: "binh_duong", label: "Bình Dương" },
+  { value: "binh_phuoc", label: "Bình Phước" },
+  { value: "binh_thuan", label: "Bình Thuận" },
+  { value: "ca_mau", label: "Cà Mau" },
+  { value: "can_tho", label: "Cần Thơ" },
+  { value: "cao_bang", label: "Cao Bằng" },
+  { value: "da_nang", label: "Đà Nẵng" },
+  { value: "dak_lak", label: "Đắk Lắk" },
+  { value: "dak_nong", label: "Đắk Nông" },
+  { value: "dien_bien", label: "Điện Biên" },
+  { value: "dong_nai", label: "Đồng Nai" },
+  { value: "dong_thap", label: "Đồng Tháp" },
+  { value: "gia_lai", label: "Gia Lai" },
+  { value: "ha_giang", label: "Hà Giang" },
+  { value: "ha_nam", label: "Hà Nam" },
+  { value: "ha_noi", label: "Hà Nội" },
+  { value: "ha_tinh", label: "Hà Tĩnh" },
+  { value: "hai_duong", label: "Hải Dương" },
+  { value: "hai_phong", label: "Hải Phòng" },
+  { value: "hau_giang", label: "Hậu Giang" },
+  { value: "hoa_binh", label: "Hòa Bình" },
+  { value: "hung_yen", label: "Hưng Yên" },
+  { value: "khanh_hoa", label: "Khánh Hòa" },
+  { value: "kien_giang", label: "Kiên Giang" },
+  { value: "kon_tum", label: "Kon Tum" },
+  { value: "lai_chau", label: "Lai Châu" },
+  { value: "lam_dong", label: "Lâm Đồng" },
+  { value: "lang_son", label: "Lạng Sơn" },
+  { value: "lao_cai", label: "Lào Cai" },
+  { value: "long_an", label: "Long An" },
+  { value: "nam_dinh", label: "Nam Định" },
+  { value: "nghe_an", label: "Nghệ An" },
+  { value: "ninh_binh", label: "Ninh Bình" },
+  { value: "ninh_thuan", label: "Ninh Thuận" },
+  { value: "phu_tho", label: "Phú Thọ" },
+  { value: "phu_yen", label: "Phú Yên" },
+  { value: "quang_binh", label: "Quảng Bình" },
+  { value: "quang_nam", label: "Quảng Nam" },
+  { value: "quang_ngai", label: "Quảng Ngãi" },
+  { value: "quang_ninh", label: "Quảng Ninh" },
+  { value: "quang_tri", label: "Quảng Trị" },
+  { value: "soc_trang", label: "Sóc Trăng" },
+  { value: "son_la", label: "Sơn La" },
+  { value: "tay_ninh", label: "Tây Ninh" },
+  { value: "thai_binh", label: "Thái Bình" },
+  { value: "thai_nguyen", label: "Thái Nguyên" },
+  { value: "thanh_hoa", label: "Thanh Hóa" },
+  { value: "thua_thien_hue", label: "Thừa Thiên Huế" },
+  { value: "tien_giang", label: "Tiền Giang" },
+  { value: "tp_hcm", label: "TP. Hồ Chí Minh" },
+  { value: "tra_vinh", label: "Trà Vinh" },
+  { value: "tuyen_quang", label: "Tuyên Quang" },
+  { value: "vinh_long", label: "Vĩnh Long" },
+  { value: "vinh_phuc", label: "Vĩnh Phúc" },
+  { value: "yen_bai", label: "Yên Bái" }
 ];
 
-const careerRoadmap = [
-    { year: "Năm 1", title: "Junior", salary: "8–15M/tháng", icon: "🌱", tasks: ["Học nhanh và thực hành nhiều", "Xây dựng kỹ năng cốt lõi"] },
-    { year: "Năm 2–3", title: "Mid-level", salary: "15–25M/tháng", icon: "🚀", tasks: ["Dẫn dắt tính năng hoặc module", "Mentoring junior"] },
-    { year: "Năm 4–5", title: "Senior", salary: "25–45M/tháng", icon: "⭐", tasks: ["Thiết kế hệ thống lớn", "Ảnh hưởng đến roadmap sản phẩm"] },
-    { year: "Năm 6+", title: "Lead / Principal", salary: "45M+/tháng", icon: "🏆", tasks: ["Lãnh đạo kỹ thuật toàn tổ chức", "Định hướng chiến lược công nghệ"] },
-];
+interface ChatMessage { id: number; role: "user" | "ai"; text: string; }
+type HistoryFilter = "all" | "discovery" | "target";
+type DetailTab = "answers" | "roadmap" | "market" | "suggestions" | "schools";
 
-const personalityQuestions = [
-    { id: 1, question: "Khi gặp một vấn đề phức tạp, bạn thường làm gì đầu tiên?", answer: "Phân tích từng bước theo logic và dữ liệu" },
-    { id: 2, question: "Môi trường làm việc lý tưởng của bạn là?", answer: "Năng động, đầy thách thức và cơ hội mới" },
-    { id: 3, question: "Điều gì mang lại sự thỏa mãn nhất cho bạn trong công việc?", answer: "Tạo ra điều gì đó mới mẻ và có ý nghĩa" },
-];
+const getEducationValue = (label: string) => {
+  const found = educationOptions.find(o => o.label === label || o.value === label);
+  return found ? found.value : "";
+};
 
-const careerSuggestions = [
-    { name: "Kỹ sư phần mềm", match: 87, description: "Xây dựng phần mềm, ứng dụng và hệ thống kỹ thuật số." },
-    { name: "Thiết kế UX/UI", match: 82, description: "Tạo ra trải nghiệm người dùng xuất sắc qua thiết kế giao diện." },
-    { name: "Quản lý dự án", match: 84, description: "Lãnh đạo và điều phối dự án từ khởi đầu đến hoàn thành." },
-    { name: "Data Scientist", match: 78, description: "Phân tích dữ liệu để tìm ra các insight có giá trị cho doanh nghiệp." },
-];
-
-type HistoryFilter = "all" | "discovery" | "targeted";
-type DetailTab = "answers" | "roadmap" | "market" | "suggestions";
-
-/* ── Component ───────────────────────────────────────────── */
+const getLocationValue = (label: string) => {
+  const found = locationOptions.find(o => o.label === label || o.value === label);
+  return found ? found.value : "";
+};
 
 export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
   const [openLogout, setOpenLogout] = useState(false);
-  /* Profile edit state */
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [profileName, setProfileName] = useState(authUser.name);
-  const [profileEmail, setProfileEmail] = useState(authUser.email);
-  const [profilePhone, setProfilePhone] = useState("0901 234 567");
-  const [profileLocation, setProfileLocation] = useState("TP. Hồ Chí Minh");
-  const [profileBio, setProfileBio] = useState("Đang xây dựng lộ trình trở thành " + (career || "chuyên gia công nghệ") + ".");
-  const [profileEducation, setProfileEducation] = useState("daihoc");
-  const [profileStatus, setProfileStatus] = useState("working");
+  const [profileName, setProfileName] = useState(authUser.name || "");
+  const [profileEmail, setProfileEmail] = useState(authUser.email || "");
+  const [profileLocation, setProfileLocation] = useState("");
+  const [profileEducation, setProfileEducation] = useState("");
+  const [profileAge, setProfileAge] = useState("");
+  const [profileInterests, setProfileInterests] = useState("");
+  const [testCount, setTestCount] = useState(0);
+  const [latestMatchScore, setLatestMatchScore] = useState(0);
+  const [lastTestDate, setLastTestDate] = useState("");
+  const [historyList, setHistoryList] = useState<TestEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(true);
 
-  /* Roadmap checkbox state */
-  const [checkedTasks, setCheckedTasks] = useState<Record<string, boolean>>(buildInitialChecked);
-  const totalTasks = skillPhases.reduce((acc, p) => acc + p.tasks.length, 0);
-  const doneTasks = Object.values(checkedTasks).filter(Boolean).length;
-  const roadmapProgress = Math.round((doneTasks / totalTasks) * 100);
+  useEffect(() => {
+    const fetchProfileAndHistoryData = async () => {
+      if (!authUser?.id) return;
+      setProfileLoading(true);
+      setHistoryLoading(true);
 
-  const toggleTask = (key: string) => {
-    setCheckedTasks((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+      try {
+        const [profileRes, historyRes] = await Promise.all([
+          fetch(`${API_URL}/api/profile/${authUser.id}`),
+          fetch(`${API_URL}/api/history/${authUser.id}`)
+        ]);
 
-  /* History comparison state */
+        const profileData = await profileRes.json();
+        if (profileData.success && profileData.profile) {
+          const p = profileData.profile;
+          setProfileName(p.fullName || authUser.name || "");
+          setProfileEmail(authUser.email || ""); 
+          setProfileInterests(p.interests || "");
+          setProfileAge(p.age ? p.age.toString() : "");
+          setProfileEducation(getEducationValue(p.educationLevel));
+          setProfileLocation(getLocationValue(p.location));
+          setLatestMatchScore(p.careerFitScore || 0);
+        } else {
+          setProfileName(authUser.name || "");
+          setProfileEmail(authUser.email || "");
+        }
+
+        const historyData = await historyRes.json();
+        if (historyData.success && Array.isArray(historyData.history)) {
+          const mappedHistory = historyData.history.map((item) => {
+            const testDate = new Date(item.createdAt);
+            const formattedDate = !isNaN(testDate.getTime()) 
+              ? `${testDate.getHours()}:${testDate.getMinutes().toString().padStart(2, '0')} ${testDate.getDate()}/${testDate.getMonth() + 1}/${testDate.getFullYear()}` 
+              : "Chưa rõ thời gian";
+
+            return {
+              ...item,
+              id: item.sessionId,
+              type: item.mode === "discovery" ? "Discovery" : "Target",
+              title: item.title || "Bài test không tên",
+              date: formattedDate,
+              score: item.relevanceScore || 0,
+            };
+          });
+
+          setHistoryList(mappedHistory); 
+          setTestCount(mappedHistory.length);
+
+          if (mappedHistory.length > 0) {
+            setLastTestDate(mappedHistory[0].date);
+            if (mappedHistory[0].score) {
+              setLatestMatchScore(mappedHistory[0].score);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi fetch dữ liệu tổng hợp ở Frontend:", err);
+        setProfileName(authUser.name || "");
+        setProfileEmail(authUser.email || "");
+      } finally {
+        setProfileLoading(false);
+        setHistoryLoading(false);
+      }
+    };
+
+    fetchProfileAndHistoryData();
+  }, [authUser.id, authUser.name, authUser.email]);
+
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [selectedTest, setSelectedTest] = useState<TestEntry | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("answers");
 
-  const filteredHistory = testHistory.filter(item => 
-    historyFilter === 'all' || item.type.toLowerCase() === historyFilter);
+  const filteredHistory = historyList.filter(item => 
+    historyFilter === 'all' || item.mode === (historyFilter === 'discovery' ? 'discovery' : 'target'));
 
-  /* Chat state */
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, role: "ai", text: `Xin chào ${authUser.name}! Tôi là AI Tư vấn của Career Pathway. Bạn cần hỗ trợ gì về lộ trình ngành ${career}?` },
+    { id: 0, role: "ai", text: `Xin chào ${authUser.name}! Tôi là AI Tư vấn của Career Pathway. Bạn cần hỗ trợ gì?` },
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const [remainingTokens, setRemainingTokens] = useState<number | null>(null);
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!input.trim()) return;
-    const userMsg: ChatMessage = { id: Date.now(), role: "user", text: input };
-    setMessages((prev) => [...prev, userMsg]);
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+    if (!user?.id) {
+      setMessages((prev) => [...prev, { id: Date.now(), role: "ai", text: "Bạn cần đăng nhập để sử dụng AI Chat." }]);
+      return;
+    }
+
+    const question = input;
+    setMessages((prev) => [...prev, { id: Date.now(), role: "user", text: question }]);
     setInput("");
     setIsTyping(true);
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now() + 1, role: "ai", text: aiReplies[Math.floor(Math.random() * aiReplies.length)] },
-      ]);
-      setIsTyping(false);
-    }, 1500);
-  };
 
+    try {
+      const res = await fetch(`${API_URL}/api/chat/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, question }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", text: data.message }]);
+      } else {
+        setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", text: data.answer }]);
+        setRemainingTokens(data.remainingTokens);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => [...prev, { id: Date.now() + 2, role: "ai", text: "Không thể kết nối tới máy chủ." }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+  
   const handleSelectTest = (test: TestEntry) => {
     setSelectedTest(test);
     setDetailTab(test.type === 'Discovery' ? 'suggestions' : 'answers');
-  }
+  };
 
   const handleBackToHistory = () => {
     setSelectedTest(null);
-  }
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setSaveError("");
+    setSaveSuccess(false);
+    try {
+      const eduLabel = educationOptions.find(o => o.value === profileEducation)?.label || profileEducation;
+      const locLabel = locationOptions.find(o => o.value === profileLocation)?.label || profileLocation;
+
+      const res = await fetch(`${API_URL}/api/profile/${authUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: profileName,
+          age: profileAge ? parseInt(profileAge, 10) : null,
+          educationLevel: eduLabel,
+          location: locLabel,
+          interests: profileInterests,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setSaveSuccess(true);
+        setEditMode(false);
+        const localUser = JSON.parse(localStorage.getItem("user") || "{}");
+        if (localUser.id) {
+          localUser.name = profileName;
+          localStorage.setItem("user", JSON.stringify(localUser));
+        }
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        setSaveError(data.message || "Lưu thất bại");
+      }
+    } catch (err) {
+      setSaveError("Không thể kết nối đến server");
+      console.error(err);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const navItems: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { key: "profile", label: "Hồ sơ cá nhân", icon: Person },
     { key: "history", label: "Lịch sử test", icon: History },
   ];
 
-
   const inputCls = "w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent";
 
-  /* ── Render ── */
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-
+    <div className="min-h-screen bg-gray-50 flex w-full">
       {/* ── Sidebar (desktop) ─────────────────── */}
-      <aside className="w-64 bg-white border-r border-border flex-col fixed h-full z-20 hidden lg:flex">
+      <aside className="w-64 bg-white border-r border-border flex flex-col fixed h-full z-20 hidden lg:flex">
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
@@ -314,9 +398,6 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
               <p className="font-semibold text-gray-900 text-sm truncate">{profileName}</p>
               <p className="text-xs text-gray-500 truncate">{profileEmail}</p>
             </div>
-          </div>
-          <div className="mt-3">
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium truncate">{career}</span>
           </div>
         </div>
 
@@ -337,54 +418,44 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
         </nav>
 
         <div className="p-4 space-y-1 border-t border-border">
-          <button onClick={onHome}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
-            <Home className="h-4 w-4" /> Trang chủ
-          </button>
           <Button
-        fullWidth
-        startIcon={<Logout />}
-        color="error"
-        onClick={() => setOpenLogout(true)}
-        sx={{
-          justifyContent: "flex-start",
-          textTransform: "none",
-        }}
-      >
-        Đăng xuất
-      </Button>
-
-      <Dialog
-        open={openLogout}
-        onClose={() => setOpenLogout(false)}
-      >
-        <DialogTitle>
-          Xác nhận đăng xuất
-        </DialogTitle>
-
-        <DialogContent>
-          <DialogContentText>
-            Bạn có chắc chắn muốn đăng xuất không?
-            Dữ liệu của bạn sẽ được lưu lại.
-          </DialogContentText>
-        </DialogContent>
-
-        <DialogActions>
-          <Button onClick={() => setOpenLogout(false)}>
-            Hủy
+            fullWidth
+            startIcon={<Home className="h-4 w-4" />}
+            onClick={onHome}
+            sx={{
+              justifyContent: "flex-start",
+              textTransform: "none",
+              color: "text.secondary",
+              fontWeight: 400,
+              fontSize: "0.875rem",
+              py: 1,
+              "&:hover": { bgcolor: "grey.50", color: "text.primary" },
+            }}
+          >
+            Trang chủ
           </Button>
-
           <Button
+            fullWidth
+            startIcon={<Logout />}
             color="error"
-            variant="contained"
-            onClick={onLogout}
+            onClick={() => setOpenLogout(true)}
+            sx={{ justifyContent: "flex-start", textTransform: "none", fontSize: "0.875rem", py: 1 }}
           >
             Đăng xuất
           </Button>
-        </DialogActions>
-      </Dialog>
         </div>
       </aside>
+
+      <Dialog open={openLogout} onClose={() => setOpenLogout(false)}>
+        <DialogTitle>Xác nhận đăng xuất</DialogTitle>
+        <DialogContent>
+          <DialogContentText>Bạn có chắc chắn muốn đăng xuất không? Dữ liệu của bạn sẽ được lưu lại.</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenLogout(false)}>Hủy</Button>
+          <Button color="error" variant="contained" onClick={onLogout}>Đăng xuất</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Mobile header ─────────────────────── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-border px-4 py-3 flex items-center justify-between">
@@ -405,7 +476,7 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
       </div>
 
       {/* ── Main content ──────────────────────── */}
-      <main className="flex-1 lg:ml-64">
+      <main className="flex-1 lg:ml-64 w-full">
         <div className="min-h-screen pt-14 lg:pt-0">
           <div className="max-w-4xl mx-auto px-4 py-6 lg:px-8 lg:py-8">
 
@@ -415,434 +486,449 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                 <div className="flex items-center justify-between">
                   <div>
                     <h1 className="text-2xl font-bold text-gray-900 font-serif">Hồ sơ cá nhân</h1>
-                    <p className="text-gray-500 text-sm mt-1">Thông tin và thành tích của bạn</p>
+                    <p className="text-gray-500 text-sm mt-1">Thông tin cá nhân của bạn</p>
                   </div>
                   <Button
-                  variant={editMode ? "contained" : "outlined"}
-                  size="small"
-                  onClick={() => setEditMode(!editMode)}
-                  sx={{
-                    textTransform: "none",
-                    ...(editMode
-                      ? {
-                          bgcolor: "success.main",
-                          "&:hover": {
-                            bgcolor: "success.dark",
-                          },
-                        }
-                      : {}),
-                  }}>
-                  {editMode ? (
-                    <>
-                      <Save sx={{ mr: 1, fontSize: 18 }} />
-                      Lưu
-                    </>
-                  ) : (
-                    <>
-                      <Edit sx={{ mr: 1, fontSize: 18 }} />
-                      Chỉnh sửa
-                    </>
-                  )}
-                </Button>
+                    variant={editMode ? "contained" : "outlined"}
+                    size="small"
+                    onClick={editMode ? handleSaveProfile : () => setEditMode(true)}
+                    disabled={savingProfile}
+                    sx={{
+                      textTransform: "none",
+                      ...(editMode ? { bgcolor: "success.main", "&:hover": { bgcolor: "success.dark" } } : {}),
+                    }}
+                  >
+                    {editMode ? (
+                      savingProfile ? <><CircularProgress size={14} sx={{ mr: 1 }} />Đang lưu...</> : <><Save sx={{ mr: 1, fontSize: 18 }} />Lưu</>
+                    ) : (
+                      <><Edit sx={{ mr: 1, fontSize: 18 }} />Chỉnh sửa</>
+                    )}
+                  </Button>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-border p-6">
-                  {/* Avatar row */}
-                  <div className="flex items-center gap-5 mb-6">
-                    <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl">
-                      {profileName.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      {editMode ? (
-                        <input value={profileName} onChange={(e) => setProfileName(e.target.value)}
-                          className="text-xl font-bold text-gray-900 border-b-2 border-amber-400 focus:outline-none bg-transparent w-48 mb-1" />
-                      ) : (
-                        <h2 className="text-xl font-bold text-gray-900">{profileName}</h2>
-                      )}
-                      {editMode ? (
-                        <input value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)}
-                          className="text-sm text-gray-500 border-b border-gray-300 focus:outline-none bg-transparent w-56" />
-                      ) : (
-                        <p className="text-gray-500 text-sm">{profileEmail}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{career}</span>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ Đã xác minh</span>
-                      </div>
-                    </div>
-                  </div>
+                {saveSuccess && <Alert severity="success" onClose={() => setSaveSuccess(false)}>Lưu hồ sơ thành công!</Alert>}
+                {saveError && <Alert severity="error" onClose={() => setSaveError("")}>{saveError}</Alert>}
 
-                  {/* Stats row */}
-                  <div className="grid md:grid-cols-3 gap-4 mb-6">
-                    {[
-                      { label: "Bài test đã làm", value: "4", icon: BarChart2, color: "text-blue-600 bg-blue-50" },
-                      { label: "Điểm match hiện tại", value: "4.4%", icon: TrendingUp, color: "text-green-600 bg-green-50" },
-                    ].map((stat) => (
-                      <div key={stat.label} className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-border">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stat.color}`}>
-                          <stat.icon className="h-5 w-5" />
+                <div className="bg-white rounded-2xl border border-border p-6">
+                  {profileLoading ? (
+                    <div className="flex justify-center items-center h-64">
+                      <CircularProgress color="warning" />
+                      <Typography sx={{ ml: 2 }}>Đang tải dữ liệu hồ sơ...</Typography>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-5 mb-6">
+                        <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl">
+                          {profileName.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                          <p className="text-xs text-gray-500">{stat.label}</p>
+                          {editMode ? (
+                            <input value={profileName} onChange={(e) => setProfileName(e.target.value)}
+                              className="text-xl font-bold text-gray-900 border-b-2 border-amber-400 focus:outline-none bg-transparent w-48 mb-1" />
+                          ) : (
+                            <h2 className="text-xl font-bold text-gray-900">{profileName}</h2>
+                          )}
+                          {editMode ? (
+                            <input value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)}
+                              className="text-sm text-gray-500 border-b border-gray-300 focus:outline-none bg-transparent w-56" />
+                          ) : (
+                            <p className="text-gray-500 text-sm">{profileEmail}</p>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Editable fields */}
-                  {editMode ? (
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Số điện thoại</label>
-                        <input value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} className={inputCls} />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Khu vực sinh sống</label>
-                        <input value={profileLocation} onChange={(e) => setProfileLocation(e.target.value)} className={inputCls} />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Trình độ học vấn</label>
-                        <select value={profileEducation} onChange={(e) => setProfileEducation(e.target.value)} className={inputCls + " bg-white"}>
-                          {educationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Tình trạng hiện tại</label>
-                        <select value={profileStatus} onChange={(e) => setProfileStatus(e.target.value)} className={inputCls + " bg-white"}>
-                          {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Giới thiệu bản thân</label>
-                        <textarea value={profileBio} onChange={(e) => setProfileBio(e.target.value)} rows={3}
-                          className={inputCls + " resize-none"} />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Button onClick={() => setEditMode(false)} className="bg-green-600 hover:bg-green-700 text-white gap-2">
-                          <Save className="h-4 w-4" /> Lưu thay đổi
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {[
-                        { label: "Số điện thoại", value: profilePhone },
-                        { label: "Khu vực sinh sống", value: profileLocation },
-                        { label: "Trình độ học vấn", value: educationOptions.find((o) => o.value === profileEducation)?.label ?? profileEducation },
-                        { label: "Tình trạng", value: statusOptions.find((o) => o.value === profileStatus)?.label ?? profileStatus },
-                        { label: "Ngành định hướng", value: career || "Chưa xác định" },
-                        { label: "Lần đánh giá gần nhất", value: "Tháng 1/2025" },
-                      ].map((item) => (
-                        <div key={item.label} className="flex flex-col gap-1">
-                          <span className="text-xs text-gray-400 uppercase tracking-wide font-medium">{item.label}</span>
-                          <span className="text-sm text-gray-800 font-medium">{item.value}</span>
+                      <div className="grid md:grid-cols-2 gap-4 mb-6">
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-border">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center text-blue-600 bg-blue-50">
+                            <BarChart2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-gray-900">{testCount}</p>
+                            <p className="text-xs text-gray-500">Bài test đã làm</p>
+                          </div>
                         </div>
-                      ))}
-                      <div className="md:col-span-2 flex flex-col gap-1">
-                        <span className="text-xs text-gray-400 uppercase tracking-wide font-medium">Giới thiệu bản thân</span>
-                        <span className="text-sm text-gray-700 leading-relaxed">{profileBio}</span>
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-border">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center text-green-600 bg-green-50">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-gray-900">{latestMatchScore > 0 ? latestMatchScore.toFixed(1) + "/5.0" : "N/A"}</p>
+                            <p className="text-xs text-gray-500">Điểm match gần nhất</p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+
+                      {editMode ? (
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Trình độ học vấn</label>
+                            <select value={profileEducation} onChange={(e) => setProfileEducation(e.target.value)} className={inputCls + " bg-white"}>
+                              <option value="">-- Chọn trình độ --</option>
+                              {educationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Tuổi</label>
+                            <input value={profileAge} onChange={(e) => setProfileAge(e.target.value)} className={inputCls} placeholder="Nhập tuổi..." />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Sở thích</label>
+                            <input value={profileInterests} onChange={(e) => setProfileInterests(e.target.value)} className={inputCls} placeholder="Nhập sở thích..." />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Khu vực mong muốn học tập/làm việc</label>
+                            <select value={profileLocation} onChange={(e) => setProfileLocation(e.target.value)} className={inputCls + " bg-white"}>
+                              <option value="">-- Chọn khu vực --</option>
+                              {locationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {[
+                            { label: "Trình độ học vấn", value: educationOptions.find((o) => o.value === profileEducation)?.label || profileEducation || "Chưa cập nhật" },
+                            { label: "Tuổi", value: profileAge || "Chưa cập nhật" },
+                            { label: "Khu vực mong muốn học tập/làm việc", value: locationOptions.find((o) => o.value === profileLocation)?.label || profileLocation || "Chưa cập nhật" },
+                          ].map((item) => (
+                            <div key={item.label} className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-400 uppercase tracking-wide font-medium">{item.label}</span>
+                              <span className="text-sm text-gray-800 font-medium">{item.value}</span>
+                            </div>
+                          ))}
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-400 uppercase tracking-wide font-medium">Sở thích</span>
+                            <span className="text-sm text-gray-800 font-medium">{profileInterests || "Chưa cập nhật"}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
-                </div>
-
-                {/* Achievements */}
-                <div className="bg-white rounded-2xl border border-border p-6">
-                  <h3 className="font-bold text-gray-900 mb-4">Thành tích đạt được</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {[
-                      { icon: "🎯", title: "First Test", desc: "Hoàn thành bài test đầu tiên" },
-                      { icon: "📈", title: "Improver", desc: "Tăng điểm match 20+ điểm" },
-                      { icon: "🔥", title: "Streak 7", desc: "Học liên tiếp 7 ngày" },
-                      { icon: "🤝", title: "Networker", desc: "Kết nối 10+ mentor" },
-                    ].map((badge) => (
-                      <div key={badge.title} className="flex flex-col items-center text-center p-4 bg-amber-50 rounded-xl border border-amber-100">
-                        <span className="text-3xl mb-2">{badge.icon}</span>
-                        <p className="text-xs font-bold text-gray-900">{badge.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{badge.desc}</p>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             )}
 
             {/* ══ HISTORY TAB ══════════════════════════════ */}
             {activeTab === "history" && (
-                <div className="space-y-6">
-                    {!selectedTest ? (
-                        <>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900 font-serif">Lịch sử test</h1>
-                                <p className="text-gray-500 text-sm mt-1">Xem lại tất cả các bài đánh giá của bạn</p>
-                            </div>
-                            <div className="bg-white rounded-2xl border border-border p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-gray-900">Các lần đánh giá</h3>
-                                    <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
-                                        {(["all", "discovery", "targeted"] as HistoryFilter[]).map(f => (
-                                            <button key={f} onClick={() => setHistoryFilter(f)}
-                                                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${historyFilter === f ? "bg-white text-amber-700 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
-                                                {f === 'all' ? 'Tất cả' : f === 'discovery' ? 'Discovery' : 'Targeted'}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    {filteredHistory.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between p-4 border border-border rounded-xl hover:border-amber-300 hover:bg-amber-50/30 transition-all">
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${item.type === 'Discovery' ? 'bg-purple-100' : 'bg-blue-100'}`}>
-                                                    {item.type === 'Discovery' ? <Compass className="w-5 h-5 text-purple-600" /> : <Target className="w-5 h-5 text-blue-600" />}
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-0.5">
-                                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.type === 'Discovery' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{item.type}</span>
-                                                        <p className="text-sm font-semibold text-gray-900">{item.career}</p>
-                                                    </div>
-                                                    <p className="text-xs text-gray-500">{item.date}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-right">
-                                                    <div className={`text-xl font-bold font-mono ${((item.match / 100) * 4 + 1) >= 4.0 ? 'text-green-600' : ((item.match / 100) * 4 + 1) >= 3.0 ? 'text-amber-600' : 'text-red-500'}`}>
-                                                        {/* Quy đổi điểm từ hệ 100 sang hệ 5 (1.0-5.0) */}
-                                                        {((item.match / 100) * 4 + 1).toFixed(1)}
-                                                    </div>
-                                                    <div className="text-xs text-gray-400">/ 5.0</div>
-                                                </div>
-                                               <Button
-                                                size="small"
-                                                variant="outlined"
-                                                onClick={() => handleSelectTest(item)}
-                                                sx={{
-                                                  borderColor: "#f59e0b",
-                                                  color: "#f59e0b",
-                                                  textTransform: "none",
-                                                  "&:hover": {
-                                                    borderColor: "#d97706",
-                                                    bgcolor: "#fffbeb",
-                                                  },
-                                                }}
-                                              >
-                                                Xem chi tiết
-                                              </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        /* ══ DETAIL VIEW ══════════════════════════════ */
-                        <div className="space-y-6">
-                            <div>
-                                <button onClick={handleBackToHistory} className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1 mb-2">
-                                    <ChevronRight className="h-4 w-4 rotate-180" /> Quay lại lịch sử
-                                </button>
-                                <h1 className="text-2xl font-bold text-gray-900 font-serif">
-                                    Chi tiết: {selectedTest.career}
-                                </h1>
-                                <p className="text-gray-500 text-sm mt-1">
-                                    {selectedTest.type} Test · {selectedTest.date} · Điểm: <span className="font-bold text-amber-600">{((selectedTest.match / 100) * 4 + 1).toFixed(1)}/5.0</span>
-                                </p>
-                            </div>
-
-                            <div className="bg-white rounded-2xl border border-border p-6">
-                                <div className="border-b border-border mb-6">
-                                    <div className="flex items-center gap-4">
-                                        {selectedTest.type === 'Targeted' && (
-                                            <>
-                                                <button onClick={() => setDetailTab('answers')} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === 'answers' ? 'text-amber-600 border-amber-600' : 'text-gray-500 border-transparent hover:text-gray-800'}`}>Câu trả lời</button>
-                                                <button onClick={() => setDetailTab('roadmap')} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === 'roadmap' ? 'text-amber-600 border-amber-600' : 'text-gray-500 border-transparent hover:text-gray-800'}`}>Lộ trình phát triển</button>
-                                                <button onClick={() => setDetailTab('market')} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === 'market' ? 'text-amber-600 border-amber-600' : 'text-gray-500 border-transparent hover:text-gray-800'}`}>Thị trường lao động</button>
-                                            </>
-                                        )}
-                                        {selectedTest.type === 'Discovery' && (
-                                            <>
-                                                <button onClick={() => setDetailTab('suggestions')} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === 'suggestions' ? 'text-amber-600 border-amber-600' : 'text-gray-500 border-transparent hover:text-gray-800'}`}>Gợi ý nghề nghiệp</button>
-                                                <button onClick={() => setDetailTab('answers')} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === 'answers' ? 'text-amber-600 border-amber-600' : 'text-gray-500 border-transparent hover:text-gray-800'}`}>Câu trả lời</button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Tab Content */}
-                                {detailTab === 'answers' && (
-                                    <div>
-                                        <h3 className="font-bold text-gray-900 mb-4">Câu hỏi & Câu trả lời đã chọn</h3>
-                                        <div className="space-y-4">
-                                            {personalityQuestions.map(q => (
-                                                <div key={q.id} className="p-4 bg-gray-50 rounded-lg border border-border">
-                                                    <p className="text-sm font-semibold text-gray-800 mb-2">Câu {q.id}: {q.question}</p>
-                                                    <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
-                                                        <Check className="h-4 w-4 text-amber-600" />
-                                                        <p className="text-sm text-amber-800">{q.answer}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {detailTab === 'suggestions' && (
-                                    <div>
-                                        <h3 className="font-bold text-gray-900 mb-4">Danh sách nghề nghiệp được gợi ý</h3>
-                                        <div className="grid md:grid-cols-2 gap-4">
-                                            {careerSuggestions.map(s => (
-                                                <div key={s.name} className="p-4 border border-border rounded-xl flex flex-col">
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <h4 className="font-bold text-gray-900">{s.name}</h4>
-                                                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{s.match}%</span>
-                                                        </div>
-                                                        <p className="text-sm text-gray-600 mb-4">{s.description}</p>
-                                                    </div>
-                                                    <Button size="small" className="w-full bg-amber-500 hover:bg-amber-600">Làm bài test chuyên sâu</Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {detailTab === 'roadmap' && (
-                                    <div className="space-y-6">
-                                        {/* Skill roadmap */}
-                                        <div className="p-6 bg-gray-50 rounded-xl border border-border">
-                                            <h3 className="font-bold text-gray-900 mb-4">Lộ trình kỹ năng (12 tháng)</h3>
-                                            <div className="relative">
-                                                <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-border" />
-                                                <div className="space-y-6">
-                                                    {skillPhases.map(({ phase, month, title, tasks }, phaseIdx) => (
-                                                        <div key={phase} className="flex gap-4 relative">
-                                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 z-10 border-2 transition-colors bg-white ${tasks.every((_, i) => checkedTasks[`${phase}-${i}`]) ? "border-amber-500 text-amber-500" : "border-gray-300 text-gray-400"}`}>
-                                                                <CheckCircle color="success" />
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <h4 className="font-semibold text-sm text-gray-900">{title}</h4>
-                                                                <p className="text-xs text-gray-500 mb-2">{month}</p>
-                                                                {tasks.map((task, taskIdx) => <p key={taskIdx} className="text-sm text-gray-700 flex items-start gap-2"><ChevronRight className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />{task}</p>)}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {/* Career roadmap */}
-                                        <div className="bg-white rounded-2xl border border-border p-6">
-                                            <h3 className="font-bold text-gray-900 mb-6">Lộ trình nghề nghiệp</h3>
-                                            <div className="grid md:grid-cols-2 gap-4">
-                                                {careerRoadmap.map((item, i) => (
-                                                    <div key={i} className={`p-4 rounded-xl border-2 ${i === 0 ? "border-amber-400 bg-amber-50" : "border-border bg-white"}`}>
-                                                        <div className="flex items-center gap-3 mb-3">
-                                                            <span className="text-2xl">{item.icon}</span>
-                                                            <div>
-                                                                <p className="text-xs text-gray-500">{item.year}</p>
-                                                                <p className="font-bold text-gray-900">{item.title}</p>
-                                                                <p className="text-xs text-amber-600 font-semibold">{item.salary}</p>
-                                                            </div>
-                                                        </div>
-                                                        <ul className="space-y-1">
-                                                          {item.tasks.map((t) => (
-                                                            <li key={t} className="text-xs text-gray-600 flex items-start gap-1.5">
-                                                              <ChevronRight className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
-                                                              {t}
-                                                            </li>
-                                                          ))}
-                                                        </ul>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {detailTab === 'market' && (
-                                    <div className="space-y-6">
-                                        <div className="bg-white rounded-2xl border border-border p-6">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <DollarSign className="h-5 w-5 text-amber-600" />
-                                                <h3 className="font-bold text-gray-900">Mức lương theo cấp độ</h3>
-                                            </div>
-                                            <div className="space-y-3">
-                                                {marketData.salaryRanges.map((range) => (
-                                                    <div key={range.level} className="flex items-center gap-4">
-                                                        <span className="text-sm text-gray-700 w-40 shrink-0">{range.level}</span>
-                                                        <div className="flex-1 bg-gray-100 rounded-full h-3 relative overflow-hidden">
-                                                            <div className="absolute top-0 left-0 bg-amber-200 h-3 rounded-full" style={{ width: `${(range.max / 120) * 100}%` }} />
-                                                            <div className="absolute top-0 left-0 bg-amber-500 h-3 rounded-full" style={{ width: `${(range.min / 120) * 100}%` }} />
-                                                        </div>
-                                                        <span className="text-xs text-gray-600 font-mono w-20 shrink-0 text-right">{range.min}–{range.max}M</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white rounded-2xl border border-border p-6">
-                                            <div className="flex items-center gap-2 mb-4">
-                                                <Award className="h-5 w-5 text-amber-600" />
-                                                <h3 className="font-bold text-gray-900">Chứng chỉ cần thiết</h3>
-                                            </div>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="text-left border-b border-border">
-                                                            <th className="py-2 pr-4 text-xs text-gray-500 font-semibold uppercase tracking-wide">Chứng chỉ</th>
-                                                            <th className="py-2 pr-4 text-xs text-gray-500 font-semibold uppercase tracking-wide">Cấp bởi</th>
-                                                            <th className="py-2 pr-4 text-xs text-gray-500 font-semibold uppercase tracking-wide">Cấp độ</th>
-                                                            <th className="py-2 text-xs text-gray-500 font-semibold uppercase tracking-wide">Ưu tiên</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-border">
-                                                        {marketData.certifications.map((cert) => (
-                                                            <tr key={cert.name} className="hover:bg-gray-50">
-                                                                <td className="py-3 pr-4 font-medium text-gray-900">{cert.name}</td>
-                                                                <td className="py-3 pr-4 text-gray-600">{cert.provider}</td>
-                                                                <td className="py-3 pr-4 text-gray-600">{cert.level}</td>
-                                                                <td className="py-3">
-                                                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cert.priority === "Cao" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                                                                        {cert.priority}
-                                                                    </span>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white rounded-2xl border border-border p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center gap-2">
-                                                    <Briefcase className="h-5 w-5 text-amber-600" />
-                                                    <h3 className="font-bold text-gray-900">Cơ hội việc làm nổi bật</h3>
-                                                </div>
-                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">1.240+ vị trí</span>
-                                            </div>
-                                            <div className="space-y-3">
-                                                {marketData.jobs.map((job, i) => (
-                                                    <div key={i} className="flex items-center justify-between p-4 border border-border rounded-xl hover:border-amber-300 hover:bg-amber-50/30 transition-all cursor-pointer">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xs font-bold text-gray-600">
-                                                                {job.company.slice(0, 2).toUpperCase()}
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-semibold text-gray-900 text-sm">{job.position}</p>
-                                                                <p className="text-xs text-gray-500">{job.company} · {job.location}</p>
-                                                            </div>
-                                                        </div>
-                                                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{job.type}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+              <div className="space-y-6">
+                {!selectedTest ? (
+                  <>
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-900 font-serif">Lịch sử test</h1>
+                      <p className="text-gray-500 text-sm mt-1">Xem lại tất cả các bài đánh giá của bạn</p>
+                    </div>
+                    
+                    <div className="bg-white rounded-2xl border border-border p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-bold text-gray-900">Các lần đánh giá</h3>
+                        <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
+                          {(["all", "discovery", "target"] as HistoryFilter[]).map((f) => (
+                            <button
+                              key={f}
+                              onClick={() => setHistoryFilter(f)}
+                              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                                historyFilter === f ? "bg-white text-amber-700 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                              }`}
+                            >
+                              {f === "all" ? "Tất cả" : f === "discovery" ? "Discovery" : "Target"}
+                            </button>
+                          ))}
                         </div>
-                    )}
-                </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {filteredHistory.length === 0 ? (
+                          <p className="text-center text-sm text-gray-500 py-6">Bạn chưa tham gia bài đánh giá nào thuộc danh mục này.</p>
+                        ) : (
+                          filteredHistory.map((item) => (
+                            <Box key={item.id} className="flex items-center justify-between p-4 border border-border rounded-xl hover:border-amber-300 hover:bg-amber-50/30 transition-all">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${item.type === "Discovery" ? "bg-purple-100" : "bg-blue-100"}`}>
+                                  {item.mode === "discovery" ? <Compass className="w-5 h-5 text-purple-600" /> : <Target className="w-5 h-5 text-blue-600" />}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.mode === "discovery" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                                      {item.mode === 'discovery' ? 'Discovery' : 'Target'}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500">{item.date}</p>
+                                  <p className="text-sm font-bold text-gray-900">
+                                    {item.subtitle || "Chưa xác định nghề nghiệp"}
+                                  </p>
+                                  
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                {item.mode !== 'discovery' ? (
+                                  <div className="text-right w-20">
+                                    <div className={`text-xl font-bold font-mono ${item.score >= 4.0 ? "text-green-600" : item.score >= 3.0 ? "text-amber-600" : "text-red-500"}`}>
+                                      {item.score ? item.score.toFixed(1) : "N/A"}
+                                    </div>
+                                    <div className="text-xs text-gray-400">/ 5.0</div>
+                                  </div>
+                                ) : (
+                                  <div className="w-20"></div>
+                                )}
+                                <Button
+                                  size="small" variant="outlined" onClick={() => handleSelectTest(item)}
+                                  sx={{
+                                    borderColor: "#f59e0b", color: "#f59e0b", textTransform: "none",
+                                    "&:hover": { borderColor: "#d97706", bgcolor: "#fffbeb" },
+                                  }}
+                                >
+                                  Xem chi tiết
+                                </Button>
+                              </div>
+                            </Box>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* ══ DETAIL VIEW ══════════════════════════════ */
+                  <div className="space-y-6">
+                    <div>
+                      <button onClick={handleBackToHistory} className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1 mb-2">
+                        <ChevronRight className="h-4 w-4 rotate-180" /> Quay lại lịch sử
+                      </button>
+                      <h1 className="text-2xl font-bold text-gray-900 font-serif">Chi tiết: {selectedTest.title}</h1>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {selectedTest.mode.charAt(0).toUpperCase() + selectedTest.mode.slice(1)} Test · {selectedTest.date}
+                        {selectedTest.mode !== 'discovery' && (
+                          <span className="font-bold text-amber-600"> · Điểm: {selectedTest.relevanceScore ? selectedTest.relevanceScore.toFixed(1) : "N/A"}/5.0</span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-border p-6">
+                      <div className="border-b border-border mb-6">
+                        <div className="flex items-center gap-4">
+                          {selectedTest.mode === "target" && (
+                            <>
+                              <button onClick={() => setDetailTab("answers")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "answers" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Câu trả lời
+                              </button>
+                              <button onClick={() => setDetailTab("roadmap")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "roadmap" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Lộ trình phát triển
+                              </button>
+                              <button onClick={() => setDetailTab("market")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "market" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Thị trường lao động
+                              </button>
+                              <button onClick={() => setDetailTab("schools")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "schools" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Trường học
+                              </button>
+                            </>
+                          )}
+                          {selectedTest.mode === "discovery" && (
+                            <>
+                              <button onClick={() => setDetailTab("answers")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "answers" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Câu trả lời
+                              </button>
+                              <button onClick={() => setDetailTab("suggestions")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "suggestions" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Gợi ý nghề nghiệp
+                              </button>
+                              <button onClick={() => setDetailTab("schools")} className={`py-3 text-sm font-semibold border-b-2 ${detailTab === "schools" ? "text-amber-600 border-amber-600" : "text-gray-500 border-transparent hover:text-gray-800"}`}>
+                                Gợi ý trường học
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {detailTab === "answers" && (
+                        <div>
+                          <h3 className="font-bold text-gray-900 mb-4 font-serif text-base">Câu hỏi & Câu trả lời đã chọn</h3>
+                          <div className="space-y-4">
+                            {selectedTest && Array.isArray(selectedTest.questions) && selectedTest.questions.length > 0 ? (
+                              selectedTest.questions.map((q: any, index: number) => {
+                                const questionText = q.questionText || q.q || `Câu hỏi số ${index + 1}`;
+                                const finalAnswerDisplay = q.answerText || q.a || "Chưa trả lời";
+
+                                return (
+                                  <div key={index} className="p-4 bg-gray-50 rounded-xl border border-border shadow-sm">
+                                    <p className="text-sm font-semibold text-gray-800 mb-2.5 leading-relaxed">Câu {index + 1}: {questionText}</p>
+                                    <div className="flex items-center gap-2 p-3 bg-amber-50/70 border border-amber-200/60 rounded-lg">
+                                      <Check className="h-4 w-4 text-amber-600 shrink-0" />
+                                      <p className="text-sm text-amber-900 font-medium">{finalAnswerDisplay}</p>
+                                    </div>
+                                    {(q.hollandType || q.trait || q.HollandGroup) && (
+                                      <div className="mt-2 flex gap-1.5 flex-wrap">
+                                        {(q.hollandType || q.HollandGroup) && (
+                                          <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-200 font-mono">
+                                            Holland: {q.hollandType || q.HollandGroup}
+                                          </span>
+                                        )}
+                                        {(q.trait || q.DacDiem) && (
+                                          <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 font-mono">
+                                            Đặc điểm: {q.trait || q.DacDiem}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="text-center py-8 bg-gray-50 border border-dashed border-border rounded-xl">
+                                <p className="text-sm text-gray-400 font-medium">Không tìm thấy danh sách câu hỏi chi tiết của lượt đánh giá này.</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {detailTab === "schools" && (
+                        <div>
+                          <h3 className="font-bold text-gray-900 mb-4">Danh sách trường học được gợi ý</h3>
+                          {(selectedTest.matchingSchools && selectedTest.matchingSchools.length > 0) ? (
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {selectedTest.matchingSchools.map((school: any, index: number) => (
+                                <div key={index} className="p-4 border border-border rounded-xl flex flex-col bg-gray-50/50">
+                                  <div className="flex-1">
+                                    <h4 className="font-bold text-gray-900 text-base">{school.name}</h4>
+                                    <p className="text-sm text-gray-600 mt-1 mb-3">{school.score}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {school.officialLink && (
+                                      <Button size="small" variant="outlined" href={school.officialLink} target="_blank" sx={{ textTransform: 'none', flex: 1 }}>
+                                        Trang chủ
+                                      </Button>
+                                    )}
+                                    {school.admissionLink && (
+                                      <Button size="small" variant="contained" href={school.admissionLink} target="_blank" sx={{ textTransform: 'none', flex: 1, bgcolor: 'warning.main', '&:hover': { bgcolor: 'warning.dark' } }}>
+                                        Tuyển sinh
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-sm text-gray-500">Không có dữ liệu trường học cho bài test này.</div>
+                          )}
+                        </div>
+                      )}
+
+                      {detailTab === "suggestions" && (
+                        <div>
+                          <h3 className="font-bold text-gray-900 mb-4">Danh sách nghề nghiệp được gợi ý</h3>
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {(selectedTest.hiringCompanies || []).map((s: any, index: number) => (
+                              <div key={index} className="p-4 border border-border rounded-xl flex flex-col bg-gray-50/50">
+                                <div className="flex-1">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <h4 className="font-bold text-gray-900">{s.role}</h4>
+                                    <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                      {selectedTest.relevanceScore?.toFixed(1) || "N/A"}/5.0
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-600 mb-4">Công ty: {s.company}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {detailTab === "roadmap" && (
+                        <div className="space-y-6">
+                          <div className="bg-white rounded-2xl border border-border p-6">
+                            <h3 className="font-bold text-gray-900 mb-6">Lộ trình nghề nghiệp</h3>
+                            <div className="space-y-4">
+                              {(selectedTest.roadmap || []).map((item: any, i: number) => (
+                                <div key={i} className={`p-4 rounded-xl border-2 ${i === 0 ? "border-amber-400 bg-amber-50" : "border-border bg-white"}`}>
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <span className="text-2xl">{item.icon}</span>
+                                    <div>
+                                      <p className="font-bold text-gray-900">{item.stage}</p>
+                                      <p className="text-xs text-gray-500">{item.desc}</p>
+                                    </div>
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {(item.certs || []).map((t: string) => (
+                                      <li key={t} className="text-xs text-gray-600 flex items-start gap-1.5">
+                                        <ChevronRight className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                                        {t}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {detailTab === "market" && (
+                        <div className="space-y-6">
+                          <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
+                            <div className="flex items-center gap-2 mb-6">
+                              <DollarSign className="h-5 w-5 text-amber-500" />
+                              <h3 className="font-bold text-gray-900 text-base">Mức lương theo cấp độ</h3>
+                            </div>
+                            <div className="space-y-5">
+                              {(selectedTest.marketSalaries || []).map((range: any, idx: number) => {
+                                const numbers = range.range ? range.range.match(/\d+/g) : null;
+                                const minVal = numbers && numbers[0] ? parseInt(numbers[0], 10) : 10;
+                                const maxVal = numbers && numbers[1] ? parseInt(numbers[1], 10) : 30;
+                                const minPercent = Math.min((minVal / 80) * 100, 100);
+                                const maxPercent = Math.min((maxVal / 80) * 100, 100);
+
+                                return (
+                                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full">
+                                    <span className="text-sm font-medium text-gray-600 w-40 shrink-0">{range.level}</span>
+                                    <div className="flex-1 bg-gray-100 rounded-full h-2.5 relative overflow-hidden">
+                                      <div className="absolute top-0 h-2.5 rounded-full bg-amber-100 transition-all duration-500" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
+                                      <div className="absolute top-0 h-2.5 rounded-full bg-amber-500 transition-all duration-500" style={{ left: `0%`, width: `${minPercent}%` }} />
+                                    </div>
+                                    <span className="text-xs font-semibold text-gray-700 w-28 shrink-0 text-left sm:text-right">
+                                      {range.range ? range.range.replace("triệu VNĐ", "M") : "Chưa cập nhật"}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
+                            <div className="flex items-center gap-2 mb-6">
+                              <Briefcase className="h-5 w-5 text-amber-500" />
+                              <h3 className="font-bold text-gray-900 text-base">Cơ hội việc làm nổi bật</h3>
+                            </div>
+                            <div className="space-y-3.5">
+                              {(selectedTest.hiringCompanies || []).map((job: any, i: number) => {
+                                const cleanRole = job.role ? job.role.replace(/\s*\(THPT\)\s*/g, "").trim() : "Chuyên viên nghiên cứu";
+                                const jobLink = job.careerLink || job.url || "https://www.topcv.vn";
+
+                                return (
+                                  <a
+                                    key={i} href={jobLink} target="_blank" rel="noopener noreferrer"
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border rounded-xl hover:border-amber-400 hover:bg-amber-50/10 hover:shadow-sm transition-all cursor-pointer gap-3"
+                                  >
+                                    <div>
+                                      <p className="font-bold text-gray-900 text-sm">{cleanRole}</p>
+                                      <p className="text-xs text-gray-500 mt-0.5 font-medium">
+                                        <span className="text-gray-700 font-semibold">{job.company}</span>
+                                        {job.location && ` · ${job.location}`}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 self-end sm:self-center">
+                                      <span className="text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-md hover:bg-amber-100 transition-colors">
+                                        Ứng tuyển ↗
+                                      </span>
+                                    </div>
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -851,7 +937,7 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
       {/* ── Floating AI Chatbox ───────────────────────────── */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
         {chatOpen && (
-          <div className="bg-white rounded-2xl shadow-2xl border border-border w-80 flex flex-col overflow-hidden" style={{ height: 420 }}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-border w-80 flex flex-col overflow-hidden" style={{ height: 460 }}>
             <div className="bg-amber-500 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 bg-white/20 rounded-full flex items-center justify-center">
@@ -878,11 +964,9 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                       <Bot className="h-3.5 w-3.5 text-amber-600" />
                     </div>
                   )}
-                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-amber-500 text-white rounded-br-sm"
-                      : "bg-white text-gray-800 border border-border shadow-sm rounded-bl-sm"
-                  }`}>{msg.text}</div>
+                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === "user" ? "bg-amber-500 text-white rounded-br-sm" : "bg-white text-gray-800 border border-border shadow-sm rounded-bl-sm"}`}>
+                    {msg.text}
+                  </div>
                 </div>
               ))}
               {isTyping && (
@@ -902,26 +986,52 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
               <div ref={messagesEnd} />
             </div>
 
+            {messages.length <= 1 && !isTyping && (
+              <div className="px-3 pt-2 pb-1 bg-gray-50 flex flex-col gap-1.5 border-t border-gray-100">
+                <p className="text-[10px] text-gray-400 font-medium pl-1">Gợi ý cho bạn:</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pb-1">
+                  {["Làm sao để chọn đúng ngành?", "Xu hướng nghề nghiệp 2026 là gì?", "Ngành CNTT cần học những môn nào?"].map((question, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setInput(question);
+                        setTimeout(() => sendMessage(), 50);
+                      }}
+                      className="text-left text-[11px] text-amber-700 bg-amber-50/70 border border-amber-200/60 rounded-lg px-2 py-1 hover:bg-amber-50 hover:border-amber-400 transition-all active:scale-95 whitespace-normal"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {remainingTokens !== null && (
+              <Box sx={{ px: 2, pt: 1, pb: 0, bgcolor: "white" }}>
+                <Typography variant="caption" color="text.secondary">Token còn lại: {remainingTokens}</Typography>
+              </Box>
+            )}
+
             <div className="p-3 bg-white border-t border-border flex items-center gap-2">
               <input
-                value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder="Hỏi AI tư vấn..."
-                className="flex-1 text-xs px-3 py-2 border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 bg-gray-50"
+                value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Hỏi AI tư vấn..." className="flex-1 text-xs px-3 py-2 border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 bg-gray-50"
               />
-              <button onClick={sendMessage} disabled={!input.trim()}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                  input.trim() ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                }`}>
+              <button
+                onClick={sendMessage} disabled={!input.trim()}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${input.trim() ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+              >
                 <Send className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         )}
 
-        <button onClick={() => setChatOpen(!chatOpen)}
-          className="w-14 h-14 bg-amber-500 hover:bg-amber-600 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95">
-          {chatOpen ? <X className="h-6 w-6 text-white" /> : <Chat color="inherit" />}
+        <button
+          onClick={() => setChatOpen(!chatOpen)}
+          className="w-14 h-14 bg-amber-500 hover:bg-amber-600 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 text-white"
+        >
+          {chatOpen ? <X className="h-6 w-6" /> : <Chat />}
         </button>
       </div>
     </div>
