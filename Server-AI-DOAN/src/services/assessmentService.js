@@ -44,6 +44,11 @@ const isStudyingHighSchool = (education) => {
 function normalizeTextField(value) {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
+    // If it's an array, check if it contains objects. If so, stringify the whole array.
+    // Otherwise, join as before.
+    if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
+      return JSON.stringify(value); // Stringify array of objects
+    }
     return value.map((v) => (v === null || v === undefined ? '' : String(v))).join(', ');
   }
   if (typeof value === 'object') {
@@ -89,36 +94,54 @@ async function claimAssessmentResult(sessionId, userId) {
       const testType = existingQ.testType;
       let evalResult = null;
       const isHighSchool = isStudyingHighSchool(profile.educationLevel);
-      //sửa ở đây
+      // Load dbHistory
+      const dbHistory = await LichSuTest.findOne({ where: { sessionId, userId: uid } });
+      const historySummary = dbHistory ? dbHistory.summary : '';
+      let historyStrengths = [];
+      try {
+        historyStrengths = dbHistory && dbHistory.strengths ? JSON.parse(dbHistory.strengths) : [];
+      } catch (e) {}
+      let historyWeaknesses = [];
+      try {
+        historyWeaknesses = dbHistory && dbHistory.weaknesses ? JSON.parse(dbHistory.weaknesses) : [];
+      } catch (e) {}
+      const historyAdvice = dbHistory ? dbHistory.advice : '';
+
       if (testType === 'career') {
         const testName = existingQ.testName || '';
         const isTarget = testName.toLowerCase().includes('khảo sát nghề') || testName.toLowerCase().includes('mục tiêu') || testName.toLowerCase().includes('targeted');
         if (isTarget) {
           if (isHighSchool) {
             const schools = await KetQuaTargetHoc.findAll({ where: { userId: uid, sessionId } });
-            const targetCareerName = schools[0]?.careerName || '';
-            const meta = generateCareerMetadata(targetCareerName); // Generate roadmap and salaries
-              evalResult = {
-                score: (await LichSuTest.findOne({ where: { sessionId } }))?.score || null,
-                targetCareer: targetCareerName,
-                trainingInstitutions: schools.map(s => s.toJSON()),
-                roadmap: meta.roadmap, // Use generated roadmap
-                marketSalaries: meta.salaries, // Use generated market salaries
-              };
+            evalResult = {
+              score: dbHistory ? dbHistory.score : null,
+              status: dbHistory && dbHistory.score > 3.0 ? 'Passed' : 'Failed',
+              summary: historySummary,
+              strengths: historyStrengths,
+              weaknesses: historyWeaknesses,
+              advice: historyAdvice,
+              trainingInstitutions: schools.map(s => s.toJSON()),
+              roadmap: [
+                "Giai đoạn 1: Nắm bắt kiến thức cơ bản và kỹ năng tự học nền tảng",
+                "Giai đoạn 2: Tham gia hoạt động thực hành, làm đồ án/dự án nhỏ cấp trường",
+                "Giai đoạn 3: Chuẩn bị hồ sơ năng lực và ôn luyện cho kỳ thi xét tuyển chuyên ngành"
+              ]
+            };
           } else {
             //sửa ở đâyđây
             const companies = await KetQuaTargetLam.findAll({ where: { userId: uid, sessionId } });
             const first = companies[0] || {};
+            const careerRoadmapFromDb = first.careerRoadmap ? JSON.parse(first.careerRoadmap) : [];
             evalResult = {
-              score: (await LichSuTest.findOne({ where: { sessionId } }))?.score || null,
-              targetCareer: first?.careerName || '',
+              score: dbHistory ? dbHistory.score : null,
+              status: dbHistory && dbHistory.score > 3.0 ? 'Passed' : 'Failed',
+              summary: historySummary,
+              strengths: historyStrengths,
+              weaknesses: historyWeaknesses,
+              advice: historyAdvice,
               companies: companies.map(c => c.toJSON()),
               laborMarket: first.laborMarket,
-              roadmap: [
-                "Giai đoạn 1: Bổ sung các kiến thức nền tảng và tích lũy chứng chỉ bổ trợ chuyên ngành",
-                "Giai đoạn 2: Tham gia thiết kế/xây dựng các dự án thực tế hoặc học việc",
-                "Giai đoạn 3: Tìm kiếm cơ hội thực tập hoặc ứng tuyển chính thức vào các doanh nghiệp tiêu biểu"
-              ]
+              roadmap: careerRoadmapFromDb.length > 0 ? careerRoadmapFromDb : meta.roadmap // Use DB roadmap, fallback to generated
             };
           }
         } else {
@@ -146,7 +169,13 @@ async function claimAssessmentResult(sessionId, userId) {
               careersMap[cName].studyInfo.topSchools.push(sch.schoolName);
               careersMap[cName].trainingInstitutions.push(sch.toJSON());
             }
-            evalResult = { compatibleCareers: Object.values(careersMap) };
+            evalResult = {
+              summary: historySummary,
+              strengths: historyStrengths,
+              weaknesses: historyWeaknesses,
+              advice: historyAdvice,
+              compatibleCareers: Object.values(careersMap)
+            };
           } else {
             const careers = await KetQuaDiscoveryLam.findAll({ where: { userId: uid, sessionId } });
             const careersMap = {};
@@ -188,7 +217,13 @@ async function claimAssessmentResult(sessionId, userId) {
                 careersMap[cName].workInfo.hiringCompanies = ['FPT Software', 'Viettel', 'Các tập đoàn đa quốc gia'];
               }
             }
-            evalResult = { compatibleCareers: Object.values(careersMap) };
+            evalResult = {
+              summary: historySummary,
+              strengths: historyStrengths,
+              weaknesses: historyWeaknesses,
+              advice: historyAdvice,
+              compatibleCareers: Object.values(careersMap)
+            };
           }
         }
       } else {
@@ -321,6 +356,10 @@ async function claimAssessmentResult(sessionId, userId) {
         sessionId: sessionId,
         testMode: modeLower,
         score: scoreVal,
+        summary: evaluation ? evaluation.summary || null : null,
+        strengths: evaluation && evaluation.strengths ? JSON.stringify(evaluation.strengths) : null,
+        weaknesses: evaluation && evaluation.weaknesses ? JSON.stringify(evaluation.weaknesses) : null,
+        advice: evaluation ? evaluation.advice || null : null,
         createdAt: new Date()
       });
 
@@ -330,7 +369,7 @@ async function claimAssessmentResult(sessionId, userId) {
         const isHighSchool = isStudyingHighSchool(ctx.userContext?.education || profile.educationLevel);
 
         // Lấy điểm đánh giá để lưu vào cột diem
-        const diemValue = evaluation.score != null ? parseFloat(evaluation.score) : null;
+        const diemValue = evaluation.score != null ? parseFloat(evaluation.score.toFixed(2)) : null;
 
         if (mode === 'Discovery') {
           if (isHighSchool) {
@@ -437,7 +476,8 @@ async function claimAssessmentResult(sessionId, userId) {
                   companyDescription: normalizeTextField(comp.companyDescription || comp.description),
                   careerLink: normalizeTextField(comp.careerLink || comp.link),
                   basicSalary: normalizeTextField(comp.basicSalary || comp.salary),
-                  laborMarket: normalizeTextField(comp.laborMarket || evaluation.laborMarket)
+                  laborMarket: normalizeTextField(comp.laborMarket),
+                  careerRoadmap: normalizeTextField(evaluation.roadmap)
                 });
               }
             }

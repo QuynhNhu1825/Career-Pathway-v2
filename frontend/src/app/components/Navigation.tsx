@@ -77,7 +77,7 @@ function AuthModal({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: loginEmail,
+          email: loginEmail,
           password: loginPw,
         }),
       });
@@ -96,6 +96,7 @@ function AuthModal({
         role: data.user.role,
         isActive: data.user.isActive,
         profile: data.profile,
+        tokenCount: data.user.tokenCount,
       };
 
       localStorage.setItem("user", JSON.stringify(user));
@@ -179,6 +180,7 @@ function AuthModal({
         role: loginData.user.role,
         isActive: loginData.user.isActive,
         profile: loginData.profile,
+        tokenCount: loginData.user.tokenCount,
       };
 
       localStorage.setItem("user", JSON.stringify(user));
@@ -304,10 +306,10 @@ export function Navigation({
           </Stack>
 
           <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, justifyContent: 'center', gap: 2 }}>
-            {["Trang chủ", "Tính năng", "Tư vấn nhanh", "Khám phá"].map((page) => (
+            {["Trang chủ", "Tính năng", "Tìm hiểu nhanh", "Khám phá"].map((page) => (
               <Button
                 key={page}
-                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tư vấn nhanh' ? 'quickcareer' : 'assessment'}`}
+                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tìm hiểu nhanh' ? 'quickcareer' : 'assessment'}`}
                 sx={{ color: 'text.secondary', '&:hover': { color: amber[500] } }}
               >
                 {page}
@@ -346,10 +348,10 @@ export function Navigation({
       <Collapse in={isOpen} timeout="auto" unmountOnExit>
         <Box sx={{ display: { xs: 'block', md: 'none' }, borderTop: 1, borderColor: 'divider', py: 2 }}>
           <Stack spacing={1} sx={{ px: 2 }}>
-            {["Trang chủ", "Tính năng", "Tư vấn nhanh", "Khám phá"].map((page) => (
+            {["Trang chủ", "Tính năng", "Tìm hiểu nhanh", "Khám phá"].map((page) => (
               <Button
                 key={page}
-                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tư vấn nhanh' ? 'quickcareer' : 'assessment'}`}
+                href={`#${page === 'Trang chủ' ? 'home' : page === 'Tính năng' ? 'features' : page === 'Tìm hiểu nhanh' ? 'quickcareer' : 'assessment'}`}
                 onClick={() => setIsOpen(false)}
                 sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
               >

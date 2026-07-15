@@ -62,6 +62,7 @@ export function Assessment({ type, career, userData, authUser, onComplete, onBac
           body: (() => {
             const body: any = {
               mode: type === "discovery" ? "Discovery" : "Targeted",
+              userId: authUser?.id, // Truyền userId để backend kiểm tra token
               target_career: career,
 
               age: userData.age,
@@ -87,6 +88,9 @@ export function Assessment({ type, career, userData, authUser, onComplete, onBac
 
         if (!response.ok) {
           const errorData = await response.json();
+          if (response.status === 403 && errorData.tokenLimit) {
+            throw new Error(errorData.message || "Bạn đã hết lượt làm bài test.");
+          }
           throw new Error(errorData.message || "Không thể tải câu hỏi từ máy chủ.");
         }
 

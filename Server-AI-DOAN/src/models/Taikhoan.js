@@ -8,11 +8,6 @@ const Taikhoan = sequelize.define('Taikhoan', {
     primaryKey: true,
     field: 'MaTK'
   },
-  username: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-    field: 'TenDangNhap'
-  },
   passwordHash: {
     type: DataTypes.STRING(100),
     allowNull: true,
@@ -26,13 +21,8 @@ const Taikhoan = sequelize.define('Taikhoan', {
   email: {
     type: DataTypes.STRING(50),
     allowNull: true,
-    unique: true,
+    unique: 'Email',
     field: 'Email'
-  },
-  phone: {
-    type: DataTypes.STRING(11),
-    allowNull: true,
-    field: 'SoDienThoai'
   },
   role: {
     type: DataTypes.STRING(20),
@@ -69,15 +59,6 @@ const Taikhoan = sequelize.define('Taikhoan', {
     defaultValue: 3,
     field: 'TokenChat'
   },
-  // Fields for codebase compatibility
-  authProvider: {
-    type: DataTypes.STRING,
-    defaultValue: 'local',
-  },
-  isEmailVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
   lastLoginAt: {
     type: DataTypes.DATE,
     allowNull: true,
@@ -88,9 +69,6 @@ const Taikhoan = sequelize.define('Taikhoan', {
 });
 
 Taikhoan.beforeCreate((taikhoan) => {
-  if (!taikhoan.username) {
-    taikhoan.username = taikhoan.email;
-  }
   if (!taikhoan.fullName) {
     taikhoan.fullName = taikhoan.email ? taikhoan.email.split('@')[0] : 'User';
   }

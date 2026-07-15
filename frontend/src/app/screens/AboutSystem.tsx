@@ -20,7 +20,7 @@ const technologies = [
   "React",
   "TypeScript",
   "Material UI",
-  "ASP.NET Core Web API",
+  "Node.js",
   "SQL Server",
   "Gemini AI",
   "O*NET Database",

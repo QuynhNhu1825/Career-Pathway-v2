@@ -26,12 +26,7 @@ const NguoiDung = sequelize.define('NguoiDung', {
   educationLevel: {
     type: DataTypes.STRING(100),
     allowNull: true,
-    field: 'HocVan'
-  },
-  studyStatus: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-    field: 'TinhTrangHT'
+    field: 'educationLevel'
   },
   location: {
     type: DataTypes.STRING(100),

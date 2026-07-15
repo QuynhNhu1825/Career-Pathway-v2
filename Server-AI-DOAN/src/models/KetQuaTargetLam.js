@@ -15,7 +15,7 @@ const KetQuaTargetLam = sequelize.define('KetQuaTargetLam', {
   diem: {
     type: DataTypes.DECIMAL(4, 2),
     allowNull: true,
-    defaultValue: 0,
+    defaultValue: 0.00,
   },
   careerName: {
     type: DataTypes.STRING(255),
@@ -38,6 +38,10 @@ const KetQuaTargetLam = sequelize.define('KetQuaTargetLam', {
     allowNull: true,
   },
   laborMarket: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  careerRoadmap: {
     type: DataTypes.TEXT,
     allowNull: true,
   },

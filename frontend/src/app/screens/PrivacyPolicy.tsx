@@ -369,9 +369,6 @@ export default function PrivacyPolicy({ onBack }: PrivacyPolicyProps) {
               <Typography component="p" sx={{ mt: 1 }}>
                 Đơn vị thực hiện: Nhóm phát triển hệ thống Career Pathway.
               </Typography>
-              <Typography component="p" sx={{ mt: 1 }}>
-                Mục đích: Phục vụ đồ án tốt nghiệp và hỗ trợ tư vấn hướng nghiệp.
-              </Typography>
             </Paper>
           </Box>
 

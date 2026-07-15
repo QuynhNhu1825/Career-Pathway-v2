@@ -1,11 +1,26 @@
 const { getGenerativeModelWithFallback } = require("./geminiClient");
+const { getBenchmarkFromAI } = require("./searchService");
 
 const model = getGenerativeModelWithFallback({
     model: "gemini-2.5-flash", // Default model, falls back to others on error
     generationConfig: {
-        temperature: 0.5, // Giảm randomness để response nhanh hơn
+        temperature: 0.2, // Giảm randomness để response nhanh hơn
         maxOutputTokens: 4096, // Tăng giới hạn output để tránh bị cắt cụt JSON
-    }
+    },
+    tools: [{ googleSearch: {} }]
+});
+
+const groundedModel = getGenerativeModelWithFallback({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 8192
+    },
+    tools: [
+        {
+            googleSearch: {}
+        }
+    ]
 });
 
 // Simple cache để tránh gọi API trùng lặp
@@ -243,9 +258,11 @@ NHIỆM VỤ: Gợi ý danh sách các trường Đại học/Cao đẳng tại 
 QUY TẮC BẮT BUỘC:
 1. Chỉ trả về JSON hợp lệ, KHÔNG kèm markdown, KHÔNG giải thích thêm.
 2. Cung cấp ĐÚNG từ 4 đến 6 trường.
-3. Mỗi trường PHẢI có đầy đủ: schoolName, major (tên ngành), location (tỉnh/thành phố), description (mô tả ngắn 1-2 câu về điểm mạnh đào tạo ngành này), benchmarks (chuỗi mô tả điểm chuẩn 3 năm gần nhất 2025/2024/2023, ví dụ "2025: 26.5 - 2024: 25.0 - 2023: 24.0"), officialLink (URL trang chủ), admissionLink (URL cổng tuyển sinh).
-4. Nếu không chắc chắn điểm chuẩn chính xác thì đặt "Đang cập nhật".
-5. BẮT BUỘC trả về JSON theo cấu trúc:
+3. Mỗi trường PHẢI có đầy đủ: schoolName, major (tên ngành), location (tỉnh/thành phố), description (mô tả ngắn 1-2 câu về điểm mạnh đào tạo ngành này), benchmarks (mô tả điểm chuẩn NĂM GẦN NHẤT, ví dụ "2025: 26.5"), benchmarkYear (năm của điểm chuẩn, ví dụ 2025), officialLink (URL trang chủ), admissionLink (URL cổng tuyển sinh).
+4. QUY TẮC THANG ĐIỂM 30: Điểm chuẩn benchmarks PHẢI ở thang điểm tốt nghiệp THPT Quốc gia truyền thống (tối đa là 30.0). Tuyệt đối không dùng thang điểm 100 hay thang khác. Nếu trường dùng thang 100 (như Bách khoa TP.HCM) hoặc nhân hệ số (thang 40), hãy tự động quy đổi tương đương về thang điểm 30 (ví dụ 80/100 -> quy đổi thành điểm thi THPT tương ứng từ 24.0 đến 28.0).
+5. CHỈ trả điểm chuẩn MỘT NĂM GẦN NHẤT (ưu tiên 2025), KHÔNG trả 3 năm.
+6. Nếu không chắc chắn điểm chuẩn chính xác thì đặt "Đang cập nhật" và benchmarkYear = null.
+7. BẮT BUỘC trả về JSON theo cấu trúc:
 {
   "summary": "Tóm tắt ngắn 2-3 câu về ngành ${career} và triển vọng học tập tại Việt Nam.",
   "schools": [
@@ -254,7 +271,8 @@ QUY TẮC BẮT BUỘC:
       "major": "Tên ngành đào tạo",
       "location": "Tỉnh/Thành phố",
       "description": "Mô tả ngắn gọn...",
-      "benchmarks": "Điểm chuẩn 3 năm gần nhất",
+      "benchmarks": "Điểm chuẩn năm gần nhất (ví dụ: 2025: 26.5)",
+      "benchmarkYear": 2025,
       "officialLink": "https://...",
       "admissionLink": "https://..."
     }
@@ -264,7 +282,7 @@ Chỉ trả về JSON.`;
 
         try {
             const result = await Promise.race([
-                model.generateContent(prompt),
+                groundedModel.generateContent(prompt),
                 new Promise((_, reject) =>
                     setTimeout(() => reject(new Error('AI request timeout')), API_TIMEOUT)
                 )
@@ -273,6 +291,10 @@ Chỉ trả về JSON.`;
             const text = response.text().trim();
             const parsed = extractJsonFromText(text);
             if (parsed && Array.isArray(parsed.schools) && parsed.schools.length > 0) {
+                parsed.schools = parsed.schools.filter(school => {
+                    const bm = school.benchmarks;
+                    return bm && bm !== 'null' && bm !== 'Đang cập nhật' && school.benchmarkYear !== null && school.benchmarkYear !== undefined;
+                });
                 return parsed;
             }
             return { __error: true, message: 'AI không trả về JSON hợp lệ cho danh sách trường.' };
@@ -314,7 +336,7 @@ Chỉ trả về JSON.`;
 
         try {
             const result = await Promise.race([
-                model.generateContent(prompt),
+                groundedModel.generateContent(prompt),
                 new Promise((_, reject) =>
                     setTimeout(() => reject(new Error('AI request timeout')), API_TIMEOUT)
                 )
@@ -419,7 +441,38 @@ Trả về JSON:
 }
 
 /**
- * Đánh giá mức độ phù hợp của user với nghề dựa trên câu trả lời
+ * Trích xuất điểm chuẩn từ raw snippet của SerpAPI
+ */
+function extractSpecificBenchmarks(snippets) {
+    const scores = [];
+    const scoreRegex = /\b(1[5-9]|2\d|30)(?:[.,]\d{1,2})?\b/g;
+
+    for (const snippet of snippets) {
+        const snippetText = snippet.snippet || '';
+        // Loại bỏ các mẫu ngày tháng dạng dd/mm hoặc mm/dd trước để tránh nhận diện sai
+        const cleanedText = snippetText.replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, '');
+        // Tìm pattern điểm chuẩn: VD "26.5", "25.0", "28.25", "24" trong snippet
+        const scoreMatches = cleanedText.match(scoreRegex);
+        if (scoreMatches) {
+            const validScores = scoreMatches
+                .map(s => parseFloat(s.replace(',', '.')))
+                .filter(n => n >= 15 && n <= 30); // Lọc điểm hợp lệ (15-30)
+            if (validScores.length > 0) {
+                scores.push(...validScores);
+            }
+        }
+    }
+    // Trả về điểm trung bình hoặc điểm cao nhất tìm được
+    if (scores.length === 0) return null;
+    // Lấy median
+    scores.sort((a, b) => a - b);
+    const mid = Math.floor(scores.length / 2);
+    return scores.length % 2 !== 0 ? scores[mid] : (scores[mid - 1] + scores[mid]) / 2;
+}
+
+/**
+ * Bước 1: Đánh giá phù hợp nghề - AI tạo danh sách trường theo ngành + khu vực
+ * (Chưa có điểm chuẩn, sẽ được bổ sung sau bằng AI Grounding)
  */
 async function evaluateCareerTest(testName, questions, userContext = {}) {
     const cacheKey = getCacheKey('evaluateCareerTest', { testName, questions, userContext });
@@ -434,16 +487,10 @@ async function evaluateCareerTest(testName, questions, userContext = {}) {
         const qaList = questions.map((q, idx) => `Q${idx + 1}: ${q.questionText} → ${q.userAnswer}`).join('\n');
 
         const ctx = userContext || {};
-        const profile = [
-            ctx.targetJob && `Job: ${ctx.targetJob}`,
-            ctx.educationLevel && `Education: ${ctx.educationLevel}`,
-            ctx.hobby && `Hobby: ${ctx.hobby}`,
-            ctx.age && `Age: ${ctx.age}`,
-            ctx.status && `Status: ${ctx.status === 'student' ? 'Học sinh THCS/THPT' : 'Sinh viên/Người đi làm'}`
-        ].filter(Boolean).join(', ');
-
         const isStudent = ctx.status === 'student';
+        const location = ctx.location || 'Việt Nam';
 
+        // Prompt cho học sinh - ưu tiên trường theo khu vực
         const studentJsonFormat = `{
   "score": 1-5 (decimal 0.5 steps),
   "summary": "Phân tích ngắn gọn cho học sinh, tập trung vào tiềm năng và định hướng.",
@@ -452,11 +499,13 @@ async function evaluateCareerTest(testName, questions, userContext = {}) {
   "advice": "Lời khuyên cụ thể cho học sinh để chuẩn bị cho ngành này.",
   "trainingInstitutions": [
     {
-      "schoolName": "Tên trường đại học/cao đẳng hàng đầu",
+      "schoolName": "Tên trường đại học/cao đẳng phù hợp với khu vực ${location}",
+      "schoolLocation": "Tỉnh/Thành phố của trường",
       "description": "Mô tả ngắn về điểm nổi bật của trường liên quan đến ngành này.",
-      "benchmarkScores": "Điểm chuẩn 3 năm gần nhất (ví dụ: 2023: 25.5, 2022: 25.0, 2021: 24.5)",
-      "officialLink": "URL trang chủ của trường",
-      "admissionLink": "URL trang tuyển sinh của trường"
+      "benchmark": null,
+      "benchmarkYear": null,
+      "officialLink": null,
+      "admissionLink": null
     }
   ]
 }`;
@@ -468,30 +517,48 @@ async function evaluateCareerTest(testName, questions, userContext = {}) {
   "weaknesses": ["Điểm yếu cần cải thiện 1", "Điểm yếu cần cải thiện 2"],
   "advice": "Lời khuyên cụ thể để thăng tiến trong ngành này.",
   "roadmap": [
-    "Giai đoạn 1: Học các kiến thức nền tảng về ngành.",
-    "Giai đoạn 2: Xây dựng 1-2 dự án cá nhân để áp dụng kiến thức.",
-    "Giai đoạn 3: Tìm hiểu và thi các chứng chỉ cơ bản."
+    {
+      "stage": "Giai đoạn 1: Bổ sung kiến thức nền tảng và chứng chỉ chuyên ngành",
+      "desc": "Nâng cao kiến thức chuyên môn thông qua các khóa học online, sách chuyên ngành, và lấy các chứng chỉ quan trọng liên quan đến ngành.",
+      "certs": ["Chứng chỉ chuyên môn (VD: PMP, AWS Certified, Google Ads)", "Chứng chỉ ngoại ngữ chuyên ngành"]
+    },
+    {
+      "stage": "Giai đoạn 2: Tham gia dự án thực tế và tích lũy kinh nghiệm",
+      "desc": "Tìm kiếm cơ hội thực tập, làm việc freelance, hoặc tham gia các dự án thực tế để áp dụng kiến thức và xây dựng portfolio/kinh nghiệm.",
+      "certs": ["Chứng chỉ hoàn thành dự án thực tế", "Thư giới thiệu từ mentor"]
+    },
+    {
+      "stage": "Giai đoạn 3: Tìm kiếm cơ hội việc làm và phát triển sự nghiệp",
+      "desc": "Chuẩn bị CV, phỏng vấn, và ứng tuyển vào các công ty uy tín. Liên tục học hỏi, cập nhật xu hướng để thăng tiến trong sự nghiệp.",
+      "certs": ["Chứng chỉ quản lý dự án", "Chứng chỉ lãnh đạo"]
+    }
   ],
   "certificates": ["Chứng chỉ A", "Chứng chỉ B"],
   "basicSalary": "Mức lương khởi điểm cho vị trí Junior dao động từ 10-15 triệu VNĐ/tháng.",
   "laborMarket": "Nhu cầu nhân lực cho ngành này đang tăng trưởng mạnh, đặc biệt ở các thành phố lớn."
 }`;
 
+        // Prompt cho AI - ưu tiên trường theo khu vực, KHÔNG cần điền điểm chuẩn
         const prompt = `Đánh giá phù hợp nghề cho "${testName}".
 
-Profile: ${profile || "N/A"}
+THÔNG TIN USER:
+- Ngành nghề quan tâm: ${ctx.targetJob || 'Chưa xác định'}
+- Khu vực sinh sống/mong muốn: ${location}
+- Học vấn: ${ctx.educationLevel || 'THPT'}
+- Độ tuổi: ${ctx.age || 'N/A'}
 
-Answers:
+QUY TẮC BẮT BUỘC:
+1. Ưu tiên các trường Đại học/Cao đẳng nằm trong khu vực "${location}" hoặc lân cận.
+2. Nếu ngành nghề phù hợp nhưng không có trường tốt trong khu vực, hãy gợi ý trường ở khu vực gần nhất có đào tạo.
+3. CHỈ cung cấp danh sách trường phù hợp, KHÔNG cần điền điểm chuẩn (sẽ được cập nhật tự động sau).
+
+Câu trả lời của học sinh:
 ${qaList}
 
-DỰA VÀO TRƯỜNG "Status" TRONG PROFILE, HÃY CHỌN 1 TRONG 2 ĐỊNH DẠNG JSON SAU ĐỂ TRẢ VỀ.
+Hãy trả về JSON theo định dạng sau:
+${isStudent ? studentJsonFormat : workingJsonFormat}
 
-1. Nếu Status là "Học sinh THCS/THPT", trả về JSON theo định dạng sau:
-${studentJsonFormat}
-
-2. Nếu Status là "Sinh viên/Người đi làm", trả về JSON theo định dạng sau:
-${workingJsonFormat}
-`;
+Chỉ trả về JSON, không kèm giải thích.`;
 
         const result = await Promise.race([
             model.generateContent(prompt),
@@ -512,6 +579,33 @@ ${workingJsonFormat}
 
         if (!parsed) {
             return { error: "Không thể tạo JSON", raw: text };
+        }
+
+        // BƯỚC 2: Gọi AI Grounding để lấy điểm chuẩn cho TỪNG trường trong danh sách
+        if (isStudent && parsed.trainingInstitutions && Array.isArray(parsed.trainingInstitutions)) {
+            const targetJob = ctx.targetJob || '';
+            const filteredInstitutions = [];
+
+            for (const school of parsed.trainingInstitutions) {
+                if (school.schoolName && targetJob) {
+                    try {
+                        const benchmarkResult = await getBenchmarkFromAI(school.schoolName, targetJob);
+                        if (benchmarkResult && benchmarkResult.benchmark !== null && benchmarkResult.benchmark !== undefined) {
+                            school.benchmark = benchmarkResult.benchmark;
+                            school.benchmarkYear = benchmarkResult.year;
+                            filteredInstitutions.push(school);
+                        }
+                        // Delay nhẹ để tránh rate limit
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                    } catch (err) {
+                        console.warn(`[AI Service] Lỗi khi lấy điểm chuẩn cho ${school.schoolName}:`, err.message);
+                    }
+                }
+            }
+            parsed.trainingInstitutions = filteredInstitutions;
+            parsed.benchmarkSource = 'gemini-grounding';
+        } else {
+            parsed.benchmarkSource = 'ai_estimation';
         }
 
         setCachedResponse(cacheKey, parsed);

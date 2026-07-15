@@ -204,8 +204,8 @@ export function Results({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          survey_id: sessionId,
-          rating_score: rating,
+            sessionId: sessionId,
+            ratingScore: rating,
           comment: feedback,
           userId: authUser.id,
         }),
@@ -399,11 +399,25 @@ export function Results({
                       <Typography variant="h6" sx={{ fontWeight: 'bold', color: green[700] }}>Lộ Trình Phát Triển</Typography>
                     </Stack>
                     <List dense disablePadding>
-                      {roadmap.map((step: string, i: number) => (
-                        <ListItem key={i} disableGutters sx={{ alignItems: 'flex-start' }}>
-                          <ListItemIcon sx={{ minWidth: 24, mt: 0.5 }}><CheckCircle sx={{ fontSize: 16, color: green[400] }} /></ListItemIcon>
-                          <ListItemText primaryTypographyProps={{ variant: 'body2' }}>{step}</ListItemText>
-                        </ListItem>
+                      {roadmap.map((item: any, i: number) => (
+                        <Paper key={i} elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'grey.200', bgcolor: 'grey.50', mb: 1.5 }}>
+                          <Stack direction="row" spacing={1} alignItems="flex-start" mb={1}>
+                            <CheckCircle sx={{ fontSize: 18, color: green[600], mt: 0.5, flexShrink: 0 }} />
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: 'text.primary' }}>
+                                {item.stage}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {item.desc}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                          {item.certs && item.certs.length > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, pl: 3 }}>
+                              Chứng chỉ: {item.certs.join(', ')}
+                            </Typography>
+                          )}
+                        </Paper>
                       ))}
                     </List>
                   </Paper>
@@ -434,9 +448,7 @@ export function Results({
                         <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                           <Typography sx={{ fontWeight: 'bold', fontSize: '1.1rem', mb: 1.5, color: 'primary.main' }}>{school.schoolName}</Typography>
                           
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: 40 }}>
-                            {school.description}
-                          </Typography>
+                          {school.description && <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: 40 }}>{school.description}</Typography>}
 
                           <Chip 
                             icon={<TrendingUp />} 

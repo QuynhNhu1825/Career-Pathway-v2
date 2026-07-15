@@ -25,11 +25,14 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 interface AuthGateProps {
   onLogin: (user: AuthUser) => void;
   onBack: () => void;
+  sessionId?: string | null;
+  userData?: any; // Thêm prop userData để nhận diện nếu cần
 }
 
-export function AuthGate({ onLogin, onBack }: AuthGateProps) {
+export function AuthGate({ onLogin, onBack, sessionId, userData }: AuthGateProps) {
   const [tab, setTab] = useState<string>("login");
   const [showPw, setShowPw] = useState(false);
+  const [showPw2, setShowPw2] = useState(false);
 
   // Login state
   const [loginEmail, setLoginEmail] = useState("");
@@ -52,6 +55,11 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       setLoginError("Email không hợp lệ");
       return;
     }
+    if (loginPw.length < 6) { 
+      setLoginError("Mật khẩu tối thiểu 6 ký tự");
+      return;
+    }
+
     setLoginError("");
 
     try {
@@ -61,8 +69,9 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: loginEmail,
+          email: loginEmail,
           password: loginPw,
+          sessionId: sessionId,
         }),
       });
 
@@ -80,10 +89,10 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
         role: data.user.role,
         isActive: data.user.isActive,
         profile: data.profile,
+        tokenCount: data.user.tokenCount,
       };
 
       localStorage.setItem("user", JSON.stringify(user));
-
       onLogin(user);
     } catch (err) {
       console.error(err);
@@ -111,6 +120,17 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
     setRegError("");
 
     try {
+      // Gộp luôn thông tin cục profile vào API đăng ký như bạn mong muốn
+      const profileData = userData ? {
+        age: userData.age,
+        educationLevel: userData.education,
+        location: userData.location,
+        interests: userData.hobby,
+        studentScores: userData.studentScores,
+        workerScores: userData.workerScores,
+      } : undefined;
+
+      // Bước 1: Gọi API Đăng ký tài khoản gửi kèm tất cả data
       const res = await fetch(`${API_URL}/api/register`, {
         method: "POST",
         headers: {
@@ -120,25 +140,28 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
           email: regEmail,
           password: regPw,
           fullName: regName,
+          sessionId: sessionId, 
+          profile: profileData
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setRegError(data.message);
+        setRegError(data.message || "Đăng ký thất bại");
         return;
       }
 
-      // Đăng nhập luôn
+      // Bước 2: Gọi API Đăng nhập tự động
       const loginRes = await fetch(`${API_URL}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: regEmail,
+          email: regEmail, 
           password: regPw,
+          sessionId: sessionId, 
         }),
       });
 
@@ -147,22 +170,29 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       if (!loginData.success) {
         setTab("login");
         setLoginEmail(regEmail);
-        setLoginError("Đăng ký thành công. Vui lòng đăng nhập lại.");
+        setLoginError("Đăng ký thành công! Vui lòng điền lại mật khẩu để đăng nhập.");
         return;
       }
 
+      // Bước 3: Đăng nhập thành công, tạo object user và ưu tiên merge cục profile từ Client + Server 
+      // để không làm mất kết quả bài làm trong profile cũ
       const user: AuthUser = {
         id: loginData.user.id,
         name: loginData.profile?.fullName || loginData.user.email,
         email: loginData.user.email,
         role: loginData.user.role,
         isActive: loginData.user.isActive,
-        profile: loginData.profile,
+        profile: { ...profileData, ...loginData.profile }, 
+        tokenCount: loginData.user.tokenCount,
       };
 
       localStorage.setItem("user", JSON.stringify(user));
+      
+      // Chờ một khoảng thời gian cực ngắn (50ms) để DB Node.js hoàn tất lưu Session hoàn chỉnh trước khi cập nhật state UI
+      setTimeout(() => {
+        onLogin(user);
+      }, 50);
 
-      onLogin(user);
     } catch (err) {
       console.error(err);
       setRegError("Không thể kết nối server");
@@ -171,7 +201,6 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
 
   return (
     <Box sx={{ minHeight: "100vh", background: "linear-gradient(to bottom right, #f9fafb, #fef3c7)", display: "flex", flexDirection: "column", position: 'relative', overflow: 'hidden' }}>
-      {/* Decorative elements */}
       <Box sx={{ position: 'absolute', top: '5rem', left: '5rem', width: '16rem', height: '16rem', bgcolor: 'rgba(245, 158, 11, 0.2)', borderRadius: '50%', filter: 'blur(60px)', pointerEvents: 'none' }} />
       <Box sx={{ position: 'absolute', bottom: '5rem', right: '5rem', width: '24rem', height: '24rem', bgcolor: 'rgba(245, 158, 11, 0.1)', borderRadius: '50%', filter: 'blur(60px)', pointerEvents: 'none' }} />
 
@@ -193,10 +222,9 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
 
       <Container component="main" maxWidth="xs" sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4, zIndex: 1 }}>
         <Stack spacing={4} alignItems="center" width="100%">
-          {/* Announcement */}
           <Stack spacing={2} alignItems="center" textAlign="center">
             <Chip
-              icon={< AutoAwesome sx={{ fontSize: 16, color: '#fbbf24' }} />}
+              icon={<AutoAwesome sx={{ fontSize: 16, color: '#fbbf24' }} />}
               label="Bài đánh giá đã hoàn thành!"
               variant="outlined"
               sx={{ 
@@ -214,9 +242,7 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
             </Typography>
           </Stack>
 
-          {/* Card */}
           <Paper elevation={2} sx={{ width: '100%', borderRadius: 4, overflow: 'hidden' }}>
-            {/* Tabs */}
             <Tabs
               value={tab}
               onChange={(_, newValue) => setTab(newValue)}
@@ -233,21 +259,21 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
               {tab === "login" ? (
                 <Stack spacing={2}>
                   <TextField
-                  label="Email"
-                  fullWidth
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Mail fontSize="small" />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
+                    label="Email"
+                    fullWidth
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Mail fontSize="small" />
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
                   <TextField
                     label="Mật khẩu"
                     type={showPw ? "text" : "password"}
@@ -299,7 +325,30 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
                       ),
                     }}
                   />
-                  <TextField label="Xác nhận mật khẩu" type="password" value={regPw2} onChange={(e) => setRegPw2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRegister()} InputProps={{ startAdornment: <InputAdornment position="start"><Lock fontSize="small" /></InputAdornment> }} />
+                  <TextField
+                    label="Xác nhận mật khẩu"
+                    type={showPw2 ? "text" : "password"}
+                    value={regPw2}
+                    onChange={(e) => setRegPw2(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Lock fontSize="small" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPw2(!showPw2)}
+                            edge="end"
+                          >
+                            {showPw2 ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
 
                   {regError && <Alert severity="error" sx={{ mt: 1 }}>{regError}</Alert>}
 
@@ -331,4 +380,4 @@ export function AuthGate({ onLogin, onBack }: AuthGateProps) {
       </Container>
     </Box>
   );
-  }
+}

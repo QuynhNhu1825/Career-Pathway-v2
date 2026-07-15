@@ -86,6 +86,24 @@ app.post('/api/consult', async (req, res) => {
 // 2. Endpoint tạo bài test chi tiết (POST)
 app.post('/api/generate-test', async (req, res) => {
   try {
+    // Kiểm tra và trừ token test nếu đã đăng nhập
+    const userId = req.headers['x-user-id'] || req.body.userId;
+    if (userId) {
+      const { Taikhoan: UserAccount } = require('./models');
+      const user = await UserAccount.findByPk(userId);
+      if (user) {
+        if (user.tokenTest <= 0) {
+          return res.status(403).json({
+            success: false,
+            tokenLimit: true,
+            message: 'Hết lượt làm bài test. Vui lòng nâng cấp hoặc mua thêm lượt.'
+          });
+        }
+        user.tokenTest -= 1;
+        await user.save();
+      }
+    }
+
     const test = await generateCareerTest(req.body);
     res.json({ success: true, test });
   } catch (error) {
@@ -111,16 +129,27 @@ app.post('/api/register', async (req, res) => {
 
 // 3. Endpoint đăng nhập thường (Email / Password)
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { email, password, sessionId } = req.body; // Destructure sessionId
 
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: 'Vui lòng nhập đủ tài khoản và mật khẩu' });
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập đủ email và mật khẩu' });
   }
 
   try {
-    const result = await checkLogin(username, password);
+    const result = await checkLogin(email, password, sessionId); // Pass sessionId to checkLogin
     console.log('[Login] result:', JSON.stringify(result));
     if (result.success) {
+      // Tạo JWT token cho admin
+      if (result.user && result.user.role === 'admin') {
+        const jwt = require('jsonwebtoken');
+        const JWT_SECRET = process.env.JWT_SECRET || 'huong_nghiep_jwt_secret_key_2024';
+        const token = jwt.sign(
+          { userId: result.user.id, email: result.user.email, role: result.user.role },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+        result.token = token;
+      }
       res.status(200).json(result);
     } else {
       res.status(401).json(result); // Lỗi xác thực
@@ -306,6 +335,25 @@ app.delete('/api/profile/:userId/scores', async (req, res) => {
 app.post('/api/test/generate', async (req, res) => {
   try {
     const { testType, targetJob, hobby, age, educationLevel } = req.body;
+    
+    // Kiểm tra và trừ token test nếu đã đăng nhập
+    const userId = req.headers['x-user-id'] || req.body.userId;
+    if (userId) {
+      const { Taikhoan: UserAccount } = require('./models');
+      const user = await UserAccount.findByPk(userId);
+      if (user) {
+        if (user.tokenTest <= 0) {
+          return res.status(403).json({
+            success: false,
+            tokenLimit: true,
+            message: 'Hết lượt làm bài test. Vui lòng nâng cấp hoặc mua thêm lượt.'
+          });
+        }
+        user.tokenTest -= 1;
+        await user.save();
+      }
+    }
+
     let test;
     if (testType === 'holland') {
       test = await generateHollandTest(req.body);
@@ -434,13 +482,13 @@ app.get('/', (req, res) => {
 });
 
 // Khởi động server (Tự động đồng bộ và tạo bảng nếu chưa có)
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   try {
     await sequelize.authenticate();
     console.log("Đã kết nối MySQL thành công!");
 
     // Tự động đồng bộ cấu trúc database với MySQL
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log("Đã đồng bộ hóa cơ sở dữ liệu MySQL thành công!");
 
     // Khởi tạo tài khoản mặc định phongdien1905@gmail.com / 123456 trong MySQL
@@ -454,9 +502,7 @@ app.listen(PORT, async () => {
       const user = await Taikhoan.create({
         email,
         passwordHash,
-        authProvider: 'local',
-        isEmailVerified: true,
-        role: 'user',
+        role: 'admin', // Thay đổi từ 'user' thành 'admin'
         tokenCount: 3
       });
       await NguoiDung.create({

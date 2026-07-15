@@ -5,6 +5,10 @@ const {
   Prompt,
   SurveyFeedback,
   LichSuTest,
+  KetQuaDiscoveryHoc,
+  KetQuaDiscoveryLam,
+  KetQuaTargetHoc,
+  KetQuaTargetLam,
   sequelize
 } = require('../models');
 const { Op } = require('sequelize');
@@ -22,14 +26,20 @@ const getDashboardStats = async () => {
       col: 'sessionId'
     });
 
-    // Tính điểm tương thích trung bình từ các profile
-    const avgCompResult = await NguoiDung.findOne({
+    // Tính điểm tương thích trung bình từ các bài test đã thực hiện
+    const avgCompResult = await LichSuTest.findOne({
       attributes: [
-        [sequelize.fn('AVG', sequelize.col('careerFitScore')), 'avgComp']
-      ]
+        [sequelize.fn('AVG', sequelize.col('score')), 'avgComp']
+      ],
+      where: {
+        score: {
+          [Op.ne]: null
+        }
+      }
     });
-    const avgCompatibility = avgCompResult && avgCompResult.getDataValue('avgComp')
-      ? Math.round(parseFloat(avgCompResult.getDataValue('avgComp')))
+    const avgCompRaw = avgCompResult ? avgCompResult.getDataValue('avgComp') : null;
+    const avgCompatibility = avgCompRaw !== null
+      ? (parseFloat(avgCompRaw) > 5 ? Math.round(parseFloat(avgCompRaw)) : Math.round((parseFloat(avgCompRaw) / 5) * 100))
       : 75; // Fallback default if empty
 
     const totalCategories = 0;
@@ -73,23 +83,47 @@ const getDashboardStats = async () => {
     }
 
     // 2. Xu hướng nghề nghiệp (5 ngành nghề được chọn làm target nhiều nhất)
-    const targetJobs = await NguoiDung.findAll({
+    const targetJobsHoc = await KetQuaTargetHoc.findAll({
       attributes: [
-        'targetJob',
-        [sequelize.fn('COUNT', sequelize.col('MaND')), 'count']
+        'careerName',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
       ],
       where: {
-        targetJob: { [Op.ne]: null }
+        careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
       },
-      group: ['targetJob'],
-      order: [[sequelize.literal('count'), 'DESC']],
-      limit: 5
+      group: ['careerName'],
+      raw: true
     });
 
-    const careerTrendData = targetJobs.map(job => ({
-      career: job.targetJob,
-      count: parseInt(job.getDataValue('count'), 10)
-    }));
+    const targetJobsLam = await KetQuaTargetLam.findAll({
+      attributes: [
+        'careerName',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+      ],
+      where: {
+        careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
+      },
+      group: ['careerName'],
+      raw: true
+    });
+
+    // Merge counts in JavaScript
+    const careerCounts = {};
+    for (const item of targetJobsHoc) {
+      const name = item.careerName.trim();
+      const cnt = parseInt(item.count || 0, 10);
+      careerCounts[name] = (careerCounts[name] || 0) + cnt;
+    }
+    for (const item of targetJobsLam) {
+      const name = item.careerName.trim();
+      const cnt = parseInt(item.count || 0, 10);
+      careerCounts[name] = (careerCounts[name] || 0) + cnt;
+    }
+
+    const careerTrendData = Object.entries(careerCounts)
+      .map(([career, count]) => ({ career, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     if (careerTrendData.length === 0) {
       careerTrendData.push(
@@ -212,7 +246,7 @@ const getAccounts = async () => {
         tenDangNhap: emailPrefix || acc.email,
         hoTen: acc.Profile ? acc.Profile.fullName : 'Chưa cập nhật',
         email: acc.email,
-        soDienThoai: acc.Profile && acc.Profile.phone ? acc.Profile.phone : 'Chưa cập nhật',
+        soDienThoai: 'Chưa cập nhật',
         vaiTro: acc.role === 'admin' ? 'Admin' : 'User',
         trangThai: acc.isActive ? 1 : 0,
         ngayTao: acc.createdAt ? acc.createdAt.toISOString().slice(0, 16).replace('T', ' ') : 'Chưa rõ',
@@ -229,7 +263,7 @@ const getAccounts = async () => {
 
 const createAccount = async (data) => {
   try {
-    const { email, password, fullName, phone, role, tokenCount } = data;
+    const { email, password, fullName, role, tokenCount } = data;
 
     const existing = await Taikhoan.findOne({ where: { email } });
     if (existing) {
@@ -242,7 +276,6 @@ const createAccount = async (data) => {
     const newAcc = await Taikhoan.create({
       email,
       passwordHash,
-      phone: phone || '',
       role: role === 'Admin' ? 'admin' : 'user',
       isActive: true,
       tokenCount: tokenCount !== undefined ? parseInt(tokenCount, 10) : 3
@@ -279,9 +312,6 @@ const updateAccount = async (id, data) => {
     }
     if (data.email !== undefined) {
       updateFields.email = data.email;
-    }
-    if (data.soDienThoai !== undefined) {
-      updateFields.phone = data.soDienThoai;
     }
 
     await Taikhoan.update(updateFields, { where: { id } });
@@ -322,54 +352,496 @@ const deleteAccount = async (id) => {
 };
 
 /**
- * --- QUẢN LÝ CAREERS (Ngành nghề) ---
+ * --- QUẢN LÝ CAREERS (Ngành nghề) - Từ bảng discovery_lam ---
  */
 const getCareers = async () => {
-  return { success: true, careers: [] };
+  try {
+    // Lấy sessionId và userId hợp lệ từ lichsutest để thỏa mãn khóa ngoại của discovery_lam
+    const firstTest = await LichSuTest.findOne({ order: [['id', 'ASC']] });
+    const defaultSessionId = firstTest ? firstTest.sessionId : null;
+    const defaultUserId = firstTest ? firstTest.userId : null;
+
+    // Tự động thêm dữ liệu mẫu nếu bảng discovery_lam trống
+    const count = await KetQuaDiscoveryLam.count();
+    if (count === 0) {
+      await KetQuaDiscoveryLam.bulkCreate([
+        {
+          careerName: 'Kỹ sư phần mềm',
+          jobDescription: 'Thiết kế, xây dựng và bảo trì các ứng dụng phần mềm và hệ thống thông tin.',
+          roles: 'Lập trình viên, Kiến trúc sư phần mềm, Chuyên viên kiểm thử',
+          outlook: 'Nhu cầu tuyển dụng cực kỳ cao trong kỷ nguyên chuyển đổi số và AI.',
+          requiredSkills: 'JavaScript, Python, Java, SQL, Tư duy logic, Git',
+          companyName: 'FPT Software',
+          companyDescription: 'Công ty xuất khẩu phần mềm và dịch vụ CNTT hàng đầu Việt Nam.',
+          basicSalary: '15,000,000 - 45,000,000 VND',
+          sessionId: defaultSessionId,
+          userId: defaultUserId
+        },
+        {
+          careerName: 'Quản lý và Tổ chức sự kiện',
+          jobDescription: 'Lên kế hoạch, thiết kế kịch bản, đàm phán nhà cung cấp và điều phối chạy chương trình sự kiện.',
+          roles: 'Chuyên viên tổ chức sự kiện, Quản lý dự án truyền thông',
+          outlook: 'Triển vọng phát triển tốt nhờ hoạt động marketing và giải trí tăng trưởng mạnh mẽ.',
+          requiredSkills: 'Kỹ năng giao tiếp, Làm việc nhóm, Đàm phán, Quản trị thời gian',
+          companyName: 'Đại Việt Media',
+          companyDescription: 'Tập đoàn tổ chức sự kiện chuyên nghiệp và agency quảng cáo.',
+          basicSalary: '12,000,000 - 25,000,000 VND',
+          sessionId: defaultSessionId,
+          userId: defaultUserId
+        },
+        {
+          careerName: 'Kỹ thuật Ô tô',
+          jobDescription: 'Bảo dưỡng, sửa chữa, chẩn đoán lỗi cơ khí, hệ thống điện tử và chế tạo bộ phận ô tô.',
+          roles: 'Kỹ thuật viên ô tô, Kỹ sư cơ khí động lực, Cố vấn dịch vụ',
+          outlook: 'Nhu cầu việc làm ổn định và phát triển vượt trội với sự phát triển xe điện và VinFast.',
+          requiredSkills: 'Điện tử ô tô, Sửa chữa cơ khí động cơ, Đọc sơ đồ mạch điện',
+          companyName: 'VinFast',
+          companyDescription: 'Nhà sản xuất ô tô và xe máy điện thông minh tiên phong tại Việt Nam.',
+          basicSalary: '12,000,000 - 32,000,000 VND',
+          sessionId: defaultSessionId,
+          userId: defaultUserId
+        },
+        {
+          careerName: 'Cầu thủ bóng đá',
+          jobDescription: 'Luyện tập thể lực, kỹ thuật cá nhân và thi đấu bóng đá chuyên nghiệp ở các giải quốc nội và quốc tế.',
+          roles: 'Cầu thủ chuyên nghiệp, Huấn luyện viên bóng đá trẻ',
+          outlook: 'Thu nhập hấp dẫn đi kèm với sự phát triển của bóng đá nước nhà, cạnh tranh khốc liệt.',
+          requiredSkills: 'Thể lực xuất sắc, Kỹ thuật chơi bóng, Tư duy chiến thuật đồng đội, Kỷ luật thép',
+          companyName: 'CLB Bóng đá Viettel (Thể Công)',
+          companyDescription: 'Một trong những câu lạc bộ bóng đá chuyên nghiệp có bề dày lịch sử lớn nhất Việt Nam.',
+          basicSalary: '20,000,000 - 90,000,000 VND',
+          sessionId: defaultSessionId,
+          userId: defaultUserId
+        }
+      ]);
+    }
+
+    const careers = await KetQuaDiscoveryLam.findAll({
+      order: [['id', 'ASC']],
+      raw: true
+    });
+
+    const categories = await KetQuaDiscoveryHoc.findAll({
+      where: {
+        careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
+      },
+      raw: true
+    });
+
+    const mappedCareers = careers.map((c) => {
+      const matchedCat = categories.find(
+        (cat) => cat.careerName.toLowerCase() === c.careerName.toLowerCase()
+      );
+      const categoryId = matchedCat
+        ? matchedCat.id.toString()
+        : categories[0]
+        ? categories[0].id.toString()
+        : '1';
+
+      return {
+        id: c.id.toString(),
+        tenNghe: c.careerName,
+        categoryId: categoryId,
+        moTa: c.jobDescription || `Mô tả công việc và triển vọng ngành ${c.careerName}`,
+        kyNangCanThiet: c.requiredSkills || 'Kỹ năng chuyên môn, Giao tiếp, Giải quyết vấn đề',
+        trangThai: 1,
+        ngayTao: new Date().toISOString()
+      };
+    });
+
+    return { success: true, careers: mappedCareers };
+  } catch (error) {
+    console.error('Lỗi getCareers:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const createCareer = async (data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const firstTest = await LichSuTest.findOne({ order: [['id', 'ASC']] });
+    const defaultSessionId = firstTest ? firstTest.sessionId : null;
+    const defaultUserId = firstTest ? firstTest.userId : null;
+
+    await KetQuaDiscoveryLam.create({
+      careerName: data.tenNghe || data.name,
+      jobDescription: data.moTa || data.description || '',
+      requiredSkills: data.kyNangCanThiet || '',
+      sessionId: defaultSessionId,
+      userId: defaultUserId
+    });
+    return { success: true, message: 'Tạo ngành nghề thành công' };
+  } catch (error) {
+    console.error('Lỗi createCareer:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const updateCareer = async (id, data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const career = await KetQuaDiscoveryLam.findByPk(id);
+    if (!career) {
+      return { success: false, message: 'Ngành nghề không tồn tại' };
+    }
+    const updateFields = {};
+    if (data.tenNghe !== undefined || data.name !== undefined) {
+      updateFields.careerName = data.tenNghe || data.name;
+    }
+    if (data.moTa !== undefined || data.description !== undefined) {
+      updateFields.jobDescription = data.moTa || data.description;
+    }
+    if (data.kyNangCanThiet !== undefined) {
+      updateFields.requiredSkills = data.kyNangCanThiet;
+    }
+    await KetQuaDiscoveryLam.update(updateFields, { where: { id } });
+    return { success: true, message: 'Cập nhật ngành nghề thành công' };
+  } catch (error) {
+    console.error('Lỗi updateCareer:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const deleteCareer = async (id) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const career = await KetQuaDiscoveryLam.findByPk(id);
+    if (!career) {
+      return { success: false, message: 'Ngành nghề không tồn tại' };
+    }
+    await KetQuaDiscoveryLam.destroy({ where: { id } });
+    return { success: true, message: 'Xóa ngành nghề thành công' };
+  } catch (error) {
+    console.error('Lỗi deleteCareer:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
+/**
+ * --- QUẢN LÝ CATEGORIES (Danh mục ngành học) - Từ bảng discovery_hoc ---
+ */
 const getCategories = async () => {
-  return { success: true, categories: [] };
+  try {
+    const categories = await KetQuaDiscoveryHoc.findAll({
+      where: {
+        careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
+      },
+      order: [['id', 'ASC']],
+      raw: true
+    });
+
+    const mappedCategories = categories.map((c) => ({
+      id: c.id.toString(),
+      tenNganh: c.careerName,
+      truong: c.schoolName || '',
+      diemChuan: c.benchmark2025 || c.benchmark2024 || 'Xem chi tiết',
+      link: c.officialLink || c.admissionLink || '',
+      nam: '2025',
+      xuHuong: 'Hot'
+    }));
+
+    return { success: true, categories: mappedCategories };
+  } catch (error) {
+    console.error('Lỗi getCategories:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const createCategory = async (data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    // Lấy sessionId và userId hợp lệ từ lichsutest để thỏa mãn khóa ngoại
+    const firstTest = await LichSuTest.findOne({ order: [['id', 'ASC']] });
+    const defaultSessionId = firstTest ? firstTest.sessionId : null;
+    const defaultUserId = firstTest ? firstTest.userId : null;
+
+    await KetQuaDiscoveryHoc.create({
+      careerName: data.tenNganh || data.name,
+      schoolName: data.truong || data.school || '',
+      benchmark2025: data.diemChuan || data.score || null,
+      officialLink: data.link || '',
+      admissionLink: data.link || '',
+      // Sử dụng sessionId và userId hợp lệ để tránh lỗi khóa ngoại
+      sessionId: defaultSessionId,
+      userId: defaultUserId,
+    });
+    return { success: true, message: 'Tạo danh mục ngành học thành công' };
+  } catch (error) {
+    console.error('Lỗi createCategory:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const updateCategory = async (id, data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const category = await KetQuaDiscoveryHoc.findByPk(id);
+    if (!category) {
+      return { success: false, message: 'Danh mục ngành học không tồn tại' };
+    }
+    const updateFields = {};
+    if (data.tenNganh !== undefined || data.name !== undefined) {
+      updateFields.careerName = data.tenNganh || data.name;
+    }
+    if (data.truong !== undefined || data.school !== undefined) {
+      updateFields.schoolName = data.truong || data.school;
+    }
+    if (data.diemChuan !== undefined || data.score !== undefined) {
+      updateFields.benchmark2025 = data.diemChuan || data.score || null;
+    }
+    if (data.link !== undefined) {
+      updateFields.officialLink = data.link;
+      updateFields.admissionLink = data.link;
+    }
+    await KetQuaDiscoveryHoc.update(updateFields, { where: { id } });
+    return { success: true, message: 'Cập nhật danh mục ngành học thành công' };
+  } catch (error) {
+    console.error('Lỗi updateCategory:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const deleteCategory = async (id) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const category = await KetQuaDiscoveryHoc.findByPk(id);
+    if (!category) {
+      return { success: false, message: 'Danh mục ngành học không tồn tại' };
+    }
+    await KetQuaDiscoveryHoc.destroy({ where: { id } });
+    return { success: true, message: 'Xóa danh mục ngành học thành công' };
+  } catch (error) {
+    console.error('Lỗi deleteCategory:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const getMarketData = async () => {
-  return { success: true, data: [] };
+  try {
+    const targets = await KetQuaTargetLam.findAll({
+      order: [['id', 'DESC']],
+      raw: true
+    });
+
+    const careers = await KetQuaDiscoveryLam.findAll({
+      raw: true
+    });
+
+    // Build map from careerName -> id
+    const careerMap = {};
+    careers.forEach(c => {
+      careerMap[c.careerName.toLowerCase().trim()] = c.id.toString();
+    });
+
+    const data = [];
+    targets.forEach((t) => {
+      const matchedCareerId = careerMap[t.careerName.toLowerCase().trim()] || t.id.toString();
+      
+      const formattedCareer = t.careerName.charAt(0).toUpperCase() + t.careerName.slice(1);
+      const formattedTitle = t.companyName ? `${formattedCareer} (${t.companyName})` : formattedCareer;
+
+      // If basicSalary exists, add Luong item
+      if (t.basicSalary && t.basicSalary.trim() !== '') {
+        data.push({
+          maDL: `${t.id}_luong`,
+          maNghe: matchedCareerId,
+          loai: 'Luong',
+          tieuDe: formattedTitle,
+          giaTri: t.basicSalary,
+          metaData: JSON.stringify({
+            companyName: t.companyName,
+            companyDescription: t.companyDescription || '',
+            careerLink: t.careerLink || '',
+            diem: t.diem || '0.00',
+            laborMarket: t.laborMarket || '',
+            careerRoadmap: t.careerRoadmap || ''
+          }),
+          ngayCapNhat: new Date().toISOString().slice(0, 10)
+        });
+      }
+
+      // If laborMarket exists, add CoHoi item
+      if (t.laborMarket && t.laborMarket.trim() !== '') {
+        data.push({
+          maDL: `${t.id}_cohoi`,
+          maNghe: matchedCareerId,
+          loai: 'CoHoi',
+          tieuDe: formattedTitle,
+          giaTri: t.laborMarket,
+          metaData: JSON.stringify({
+            companyName: t.companyName,
+            companyDescription: t.companyDescription || '',
+            careerLink: t.careerLink || '',
+            diem: t.diem || '0.00',
+            basicSalary: t.basicSalary || '',
+            careerRoadmap: t.careerRoadmap || ''
+          }),
+          ngayCapNhat: new Date().toISOString().slice(0, 10)
+        });
+      }
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Lỗi getMarketData:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const createMarketData = async (data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const { maNghe, loai, tieuDe, giaTri, metaData } = data;
+    
+    // Tìm tên nghề dựa trên maNghe (ID)
+    let careerName = '';
+    const career = await KetQuaDiscoveryLam.findByPk(maNghe);
+    if (career) {
+      careerName = career.careerName;
+    } else {
+      careerName = maNghe;
+    }
+
+    let companyName = 'Công ty';
+    let companyDescription = '';
+    let diem = 4.0;
+    let careerLink = '';
+    let laborMarketVal = '';
+    let basicSalaryVal = '';
+    let careerRoadmap = '';
+    
+    if (metaData) {
+      try {
+        const meta = typeof metaData === 'string' ? JSON.parse(metaData) : metaData;
+        if (meta.companyName) companyName = meta.companyName;
+        if (meta.companyDescription) companyDescription = meta.companyDescription;
+        if (meta.diem) diem = parseFloat(meta.diem);
+        if (meta.careerLink) careerLink = meta.careerLink;
+        if (meta.laborMarket) laborMarketVal = meta.laborMarket;
+        if (meta.basicSalary) basicSalaryVal = meta.basicSalary;
+        if (meta.careerRoadmap) careerRoadmap = meta.careerRoadmap;
+      } catch (e) {}
+    }
+
+    // Try parsing company name from tieuDe if it contains parentheses
+    const match = tieuDe.match(/\(([^)]+)\)/);
+    if (match) {
+      companyName = match[1];
+    } else if (tieuDe && !metaData) {
+      companyName = tieuDe;
+    }
+
+    if (loai === 'Luong') {
+      basicSalaryVal = giaTri;
+    } else if (loai === 'CoHoi') {
+      laborMarketVal = giaTri;
+    }
+
+    const firstTest = await LichSuTest.findOne({ order: [['id', 'ASC']] });
+    const defaultSessionId = firstTest ? firstTest.sessionId : `admin_${Date.now()}`;
+    const defaultUserId = firstTest ? firstTest.userId : null;
+
+    const newRecord = await KetQuaTargetLam.create({
+      careerName,
+      companyName,
+      companyDescription,
+      careerLink,
+      basicSalary: basicSalaryVal || null,
+      laborMarket: laborMarketVal || null,
+      careerRoadmap,
+      diem,
+      sessionId: defaultSessionId,
+      userId: defaultUserId
+    });
+
+    return { success: true, message: 'Tạo dữ liệu thị trường thành công', data: newRecord };
+  } catch (error) {
+    console.error('Lỗi createMarketData:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const updateMarketData = async (id, data) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const parts = id.split('_');
+    const dbId = parseInt(parts[0], 10);
+    const typeSuffix = parts[1]; // 'luong' or 'cohoi'
+
+    const record = await KetQuaTargetLam.findByPk(dbId);
+    if (!record) {
+      return { success: false, message: 'Dữ liệu thị trường không tồn tại' };
+    }
+
+    const { maNghe, loai, tieuDe, giaTri, metaData } = data;
+    const updateFields = {};
+
+    if (maNghe !== undefined) {
+      const career = await KetQuaDiscoveryLam.findByPk(maNghe);
+      if (career) {
+        updateFields.careerName = career.careerName;
+      } else {
+        updateFields.careerName = maNghe;
+      }
+    }
+
+    if (giaTri !== undefined) {
+      if (typeSuffix === 'luong') {
+        updateFields.basicSalary = giaTri;
+      } else if (typeSuffix === 'cohoi') {
+        updateFields.laborMarket = giaTri;
+      }
+    }
+
+    if (metaData !== undefined) {
+      try {
+        const meta = typeof metaData === 'string' ? JSON.parse(metaData) : metaData;
+        if (meta.companyName) updateFields.companyName = meta.companyName;
+        if (meta.companyDescription) updateFields.companyDescription = meta.companyDescription;
+        if (meta.diem) updateFields.diem = parseFloat(meta.diem);
+        if (meta.careerLink) updateFields.careerLink = meta.careerLink;
+        if (meta.laborMarket && typeSuffix !== 'cohoi') updateFields.laborMarket = meta.laborMarket;
+        if (meta.basicSalary && typeSuffix !== 'luong') updateFields.basicSalary = meta.basicSalary;
+        if (meta.careerRoadmap) updateFields.careerRoadmap = meta.careerRoadmap;
+      } catch (e) {}
+    }
+
+    if (tieuDe !== undefined) {
+      const match = tieuDe.match(/\(([^)]+)\)/);
+      if (match) {
+        updateFields.companyName = match[1];
+      }
+    }
+
+    await KetQuaTargetLam.update(updateFields, { where: { id: dbId } });
+    return { success: true, message: 'Cập nhật dữ liệu thị trường thành công' };
+  } catch (error) {
+    console.error('Lỗi updateMarketData:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 const deleteMarketData = async (id) => {
-  return { success: true, message: 'Tính năng đã tạm tắt để nâng cấp' };
+  try {
+    const parts = id.split('_');
+    const dbId = parseInt(parts[0], 10);
+    const typeSuffix = parts[1]; // 'luong' or 'cohoi'
+
+    const record = await KetQuaTargetLam.findByPk(dbId);
+    if (!record) {
+      return { success: false, message: 'Dữ liệu thị trường không tồn tại' };
+    }
+
+    if (typeSuffix === 'luong') {
+      record.basicSalary = null;
+    } else if (typeSuffix === 'cohoi') {
+      record.laborMarket = null;
+    }
+
+    if ((!record.basicSalary || record.basicSalary.trim() === '') && 
+        (!record.laborMarket || record.laborMarket.trim() === '')) {
+      await KetQuaTargetLam.destroy({ where: { id: dbId } });
+    } else {
+      await record.save();
+    }
+
+    return { success: true, message: 'Xóa dữ liệu thị trường thành công' };
+  } catch (error) {
+    console.error('Lỗi deleteMarketData:', error);
+    return { success: false, message: 'Lỗi hệ thống' };
+  }
 };
 
 /**
@@ -384,10 +856,10 @@ const getPrompts = async () => {
     const mapped = prompts.map(pr => ({
       id: pr.MaID.toString(),
       code: pr.MaPrompt ? pr.MaPrompt.toString() : `PMT_${pr.MaID}`,
-      title: pr.MoTa || 'Prompt vô đề',
-      description: pr.MoTa || '',
+      title: pr.MoTa || 'Prompt không có tiêu đề',
+      description: pr.MoTaPhu || '',
       content: pr.NoiDung || '',
-      version: pr.PhienBan ? pr.PhienBan.toString() : '1.0.0',
+      version: pr.PhienBan ? pr.PhienBan.toString() : '1',
       inputVariables: pr.BienDauVao ? (typeof pr.BienDauVao === 'object' ? JSON.stringify(pr.BienDauVao) : pr.BienDauVao) : '{}',
       status: pr.TrangThaiHD ? 'active' : 'inactive',
       createdAt: pr.createdAt ? pr.createdAt.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
@@ -404,6 +876,17 @@ const createPrompt = async (data) => {
   try {
     const { code, title, content, description, version, inputVariables, status } = data;
 
+    // Validation
+    if (!code || code.trim() === '') {
+      return { success: false, message: 'Mã Prompt không được để trống' };
+    }
+    if (!title || title.trim() === '') {
+      return { success: false, message: 'Tiêu đề Prompt không được để trống' };
+    }
+    if (!content || content.trim() === '') {
+      return { success: false, message: 'Nội dung Prompt không được để trống' };
+    }
+
     let variables = {};
     if (inputVariables) {
       try {
@@ -413,22 +896,23 @@ const createPrompt = async (data) => {
       }
     }
 
-    // Convert code string to integer representation if needed, or generate random id
-    const promptCode = parseInt(code.replace(/[^0-9]/g, ''), 10) || Math.floor(Math.random() * 1000);
+    // Parse version to integer
+    const parsedVersion = parseInt(version, 10) || 1;
 
     await Prompt.create({
-      MaPrompt: promptCode,
-      MoTa: description || title || '',
-      NoiDung: content || '',
+      MaPrompt: code.trim(), // Keep as string
+      MoTa: title.trim(),
+      MoTaPhu: description ? description.trim() : null,
+      NoiDung: content,
       BienDauVao: variables,
       TrangThaiHD: status === 'active',
-      PhienBan: parseInt(version, 10) || 1
+      PhienBan: parsedVersion
     });
 
     return { success: true, message: 'Tạo Prompt thành công' };
   } catch (error) {
     console.error('Lỗi createPrompt:', error);
-    return { success: false, message: 'Lỗi hệ thống' };
+    return { success: false, message: 'Lỗi hệ thống: ' + error.message };
   }
 };
 
@@ -439,9 +923,18 @@ const updatePrompt = async (id, data) => {
       return { success: false, message: 'Prompt không tồn tại' };
     }
 
+    // Validation
+    if (data.title !== undefined && data.title.trim() === '') {
+      return { success: false, message: 'Tiêu đề Prompt không được để trống' };
+    }
+    if (data.content !== undefined && data.content.trim() === '') {
+      return { success: false, message: 'Nội dung Prompt không được để trống' };
+    }
+
     const updateFields = {};
     if (data.description !== undefined || data.title !== undefined) {
-      updateFields.MoTa = data.description || data.title;
+      updateFields.MoTa = (data.title || pr.MoTa || '').trim();
+      updateFields.MoTaPhu = data.description ? data.description.trim() : null;
     }
     if (data.content !== undefined) {
       updateFields.NoiDung = data.content;
@@ -453,7 +946,7 @@ const updatePrompt = async (id, data) => {
       updateFields.TrangThaiHD = data.status === 'active';
     }
     if (data.code !== undefined) {
-      updateFields.MaPrompt = parseInt(data.code.replace(/[^0-9]/g, ''), 10) || pr.MaPrompt;
+      updateFields.MaPrompt = data.code.trim();
     }
     if (data.inputVariables !== undefined) {
       let variables = {};
@@ -469,7 +962,7 @@ const updatePrompt = async (id, data) => {
     return { success: true, message: 'Cập nhật Prompt thành công' };
   } catch (error) {
     console.error('Lỗi updatePrompt:', error);
-    return { success: false, message: 'Lỗi hệ thống' };
+    return { success: false, message: 'Lỗi hệ thống: ' + error.message };
   }
 };
 

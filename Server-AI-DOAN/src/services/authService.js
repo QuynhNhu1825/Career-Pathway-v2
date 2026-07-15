@@ -1,20 +1,22 @@
 const bcrypt = require('bcrypt');
-const { Taikhoan: UserAccount, NguoiDung: UserProfile } = require('../models');
+const { 
+  Taikhoan: UserAccount, 
+  NguoiDung: UserProfile,
+  LichSuTest: SurveyModel // SỬA LỖI: Hãy thay đổi tên Model này đúng với tên Model Khảo sát/Bài test thực tế trong dự án của bạn (ví dụ: KhaoSat, Survey, hoặc AssessmentResult)
+} = require('../models');
 const { getSessionContext } = require('./sessionContextStore');
 
 /**
- * Hàm kiểm tra đăng nhập bằng Username / Password
+ * Hàm kiểm tra đăng nhập bằng Email / Password
  */
-const checkLogin = async (username, password) => {
+const checkLogin = async (email, password, sessionId = null) => {
   try {
-    const user = await UserAccount.findOne({ where: { email: username } });
+    const user = await UserAccount.findOne({ where: { email: email } });
 
     if (!user) {
       return { success: false, message: 'Tài khoản không tồn tại' };
     }
 
-    
-    // Ngăn đăng nhập bằng pass nếu tài khoản tạo qua Google/Facebook mà chưa setup pass
     if (!user.passwordHash) {
       return { success: false, message: 'Tài khoản không có mật khẩu, vui lòng liên hệ hỗ trợ' };
     }
@@ -23,59 +25,81 @@ const checkLogin = async (username, password) => {
     if (!isPasswordValid) {
       return { success: false, message: 'Mật khẩu không chính xác' };
     }
+    
     if (user.isActive === false) {
       return { success: false, message: 'Tài khoản hiện đang bị khóa' };
     }
-            await UserAccount.update(
-              { 
-                tokenCount: 3,
-                lastLoginAt: new Date() 
-              },
-              { where: { id: user.id } }
-            );
 
-            const profile = await UserProfile.findOne({
-                where: { userId: user.id },
-                attributes: [
-                    'fullName',
-                    'educationLevel',
-                    'interests',
-                    'age',
-                    'studyStatus',
-                    'location',
-                ],
-            });
+    // SỬA LỖI: Gộp 2 câu lệnh update làm 1 để tối ưu hiệu năng và tránh ghi đè dữ liệu tokenTest
+    await UserAccount.update(
+      { 
+        tokenCount: 3,
+        tokenTest: 3,
+        lastLoginAt: new Date() 
+      },
+      { where: { id: user.id } }
+    );
 
-            let profileJson = null;
-            if (profile) {
-                profileJson = {
-                    fullName: profile.fullName,
-                    educationLevel: profile.educationLevel,
-                    interests: profile.interests,
-                    hobby: profile.interests,
-                    age: profile.age,
-                    studyStatus: profile.studyStatus,
-                    location: profile.location,
-                    targetJob: profile.targetJob,
-                    careerFitScore: profile.careerFitScore,
-                    phone: profile.phone,
-                    bio: profile.bio,
-                    dateOfBirth: profile.dateOfBirth,
-                    phone: user.phone, // Lấy từ user (Taikhoan)
-                    bio: profile.bio, // Lấy từ profile
-                    dateOfBirth: profile.dateOfBirth, // Lấy từ profile
-                    // avatarUrl và careerFitResult không có trong model UserProfile, giữ nguyên null hoặc xóa nếu không dùng
-                    avatarUrl: null, 
-                    careerFitResult: null, 
-                };
-            }
+    // Xử lý liên kết dữ liệu cũ qua sessionId nếu có
+    if (sessionId) {
+      const { updateProfile, saveScores } = require('./profileService'); 
+      const context = getSessionContext(sessionId);
+      const userContext = context?.userContext;
+      const academicData = context?.academicData;
 
-            return {
-                success: true,
-                message: 'Đăng nhập thành công',
-                user: { id: user.id, email: user.email, role: user.role, isActive: user.isActive },
-                profile: profileJson,
-            };
+      if (userContext) {
+        await updateProfile(user.id, {
+          fullName: userContext.fullName || user.fullName,
+          age: userContext.age || null,
+          educationLevel: userContext.education || null,
+          location: userContext.location || null,
+          interests: userContext.hobby || null,
+        });
+      }
+      
+      if (academicData) {
+        await saveScores(user.id, academicData);
+      }
+
+      // SỬA LỖI QUAN TRỌNG: Cập nhật userId cho bản ghi bài khảo sát thực tế trong DB
+      if (SurveyModel) {
+        await SurveyModel.update(
+          { userId: user.id },
+          { where: { sessionId: sessionId } } 
+        );
+      }
+    }
+
+    // Tải thông tin profile mới nhất
+    const profile = await UserProfile.findOne({
+      where: { userId: user.id },
+      attributes: ['fullName', 'educationLevel', 'interests', 'age', 'location'],
+      include: ['StudentScores', 'WorkerScores'] 
+    });
+
+    let profileJson = null;
+    if (profile) {
+      profileJson = {
+        fullName: profile.fullName,
+        educationLevel: profile.educationLevel,
+        interests: profile.interests,
+        hobby: profile.interests,
+        age: profile.age,
+        location: profile.location,
+        phone: user.phone, 
+        avatarUrl: null, 
+        careerFitResult: null,
+        studentScores: profile.StudentScores || null,
+        workerScores: profile.WorkerScores || null,
+      };
+    }
+
+    return {
+      success: true,
+      message: 'Đăng nhập thành công',
+      user: { id: user.id, email: user.email, role: user.role, isActive: user.isActive },
+      profile: profileJson,
+    };
   } catch (error) {
     console.error('Lỗi trong quá trình đăng nhập:', error);
     return { success: false, message: 'Lỗi hệ thống' };
@@ -83,123 +107,74 @@ const checkLogin = async (username, password) => {
 };
 
 /**
- * Hàm xử lý đăng nhập qua Google hoặc Facebook
- * @param {string} provider - 'google' hoặc 'facebook'
- * @param {string} providerId - ID duy nhất từ Google/Facebook
- * @param {string} email - Email từ Google/Facebook
- * @param {string} displayName - Tên hiển thị người dùng
- * @param {string} avatarUrl - URL ảnh đại diện
- */
-/* [TẠM ẨN - Chức năng Social Login]
-const socialLogin = async (provider, providerId, email, displayName, avatarUrl) => {
-  try {
-    let user;
-
-    // 1. Tìm user theo provider ID
-    if (provider === 'google') {
-      user = await UserAccount.findOne({ where: { googleId: providerId } });
-    } else if (provider === 'facebook') {
-      user = await UserAccount.findOne({ where: { facebookId: providerId } });
-    }
-
-    // 2. Nếu chưa có, thử tìm qua email (người dùng đã tạo acc bằng email trước đó)
-    if (!user && email) {
-      user = await UserAccount.findOne({ where: { email } });
-      if (user) {
-        // Cập nhật link tài khoản social vào account cũ
-        if (provider === 'google') user.googleId = providerId;
-        if (provider === 'facebook') user.facebookId = providerId;
-        await user.save();
-      }
-    }
-
-    // 3. Nếu vẫn không có -> Tài khoản mới tinh, tiến hành tạo mới
-    if (!user) {
-      user = await UserAccount.create({
-        // Nếu Facebook ko cấp quyền lấy email thì sinh email tạm
-        email: email || `${providerId}@${provider}.local`, 
-        passwordHash: null, // Không cần pass
-        googleId: provider === 'google' ? providerId : null,
-        facebookId: provider === 'facebook' ? providerId : null,
-        authProvider: provider,
-        isEmailVerified: true, // Trust social provider
-        lastLoginAt: new Date(),
-      });
-
-      // Tự động tạo một Profile cho user mới
-      await UserProfile.create({
-        userId: user.id,
-        fullName: displayName || '',
-      });
-    } else {
-      // 4. Nếu đã có tài khoản thì chỉ cập nhật lastLogin
-      user.lastLoginAt = new Date();
-      await user.save();
-    }
-
-    return {
-      success: true,
-      message: `Đăng nhập qua ${provider} thành công`,
-      user: { id: user.id, email: user.email, role: user.role, authProvider: user.authProvider }
-    };
-
-  } catch (error) {
-    console.error(`Lỗi đăng nhập qua ${provider}:`, error);
-    return { success: false, message: 'Lỗi hệ thống khi xử lý đăng nhập mạng xã hội' };
-  }
-};
-*/
-
-/**
  * Hàm đăng ký tài khoản mới bằng Email / Password
- * @param {string} email - Email đăng ký
- * @param {string} password - Mật khẩu
- * @param {string} fullName - Tên đầy đủ
  */
 const register = async (email, password, fullName, sessionId) => {
   try {
-    // 1. Kiểm tra xem email đã tồn tại chưa
     const existingUser = await UserAccount.findOne({ where: { email } });
     if (existingUser) {
       return { success: false, message: 'Email này đã được sử dụng' };
     }
 
-    // 2. Mã hóa mật khẩu
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 3. Tạo tài khoản mới
     const newUser = await UserAccount.create({
       email,
       passwordHash,
-      // authProvider: 'local',
-      // isEmailVerified: false,
+      tokenCount: 3,  // Khởi tạo token mặc định cho tài khoản mới
+      tokenTest: 3
     });
 
-    // Lấy context từ session nếu có
     const context = sessionId ? getSessionContext(sessionId) : null;
     const userContext = context?.userContext || {};
 
-    // 4. Tạo profile cho user
-    await UserProfile.create({
+    const userProfile = await UserProfile.create({
       userId: newUser.id,
       fullName: fullName || userContext.fullName || '',
       age: userContext.age || null,
       educationLevel: userContext.education || null,
-      studyStatus: userContext.status || null,
       location: userContext.location || null,
       interests: userContext.hobby || null,
-      targetJob: context?.targetCareer || null,
     });
 
-    return { 
-      success: true, 
+    if (context && context.academicData) {
+      const { saveScores } = require('./profileService');
+      await saveScores(newUser.id, context.academicData);
+    }
+
+    // SỬA LỖI QUAN TRỌNG: Cập nhật lại liên kết bảng Khảo sát về userId mới đăng ký
+    if (sessionId && SurveyModel) {
+      await SurveyModel.update(
+        { userId: newUser.id },
+        { where: { sessionId: sessionId } }
+      );
+    }
+
+    const reloadedProfile = await UserProfile.findOne({
+      where: { userId: newUser.id },
+      attributes: ['fullName', 'educationLevel', 'interests', 'age', 'location'],
+      include: ['StudentScores', 'WorkerScores'] 
+    });
+
+    return {
+      success: true,
       message: 'Đăng ký thành công',
       user: {
         id: newUser.id,
         email: newUser.email,
         role: newUser.role
-      }
+      },
+      profile: reloadedProfile ? { 
+        fullName: reloadedProfile.fullName,
+        age: reloadedProfile.age,
+        educationLevel: reloadedProfile.educationLevel,
+        location: reloadedProfile.location,
+        interests: reloadedProfile.interests,
+        hobby: reloadedProfile.interests, 
+        studentScores: reloadedProfile.StudentScores || null,
+        workerScores: reloadedProfile.WorkerScores || null,
+      } : null,
     };
   } catch (error) {
     console.error('Lỗi khi đăng ký tài khoản:', error);
@@ -209,6 +184,5 @@ const register = async (email, password, fullName, sessionId) => {
 
 module.exports = {
   checkLogin,
-  // socialLogin,
   register
 };

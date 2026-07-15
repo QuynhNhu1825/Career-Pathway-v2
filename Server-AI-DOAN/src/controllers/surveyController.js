@@ -1,7 +1,10 @@
 const surveyService = require('../services/surveyService');
 const { claimAssessmentResult } = require('../services/assessmentService');
-const profileService = require('../services/profileService');
+const { getSessionContext } = require('../services/sessionContextStore');
+const profileService = require('../services/profileService'); 
+const { Taikhoan: UserAccount } = require('../models'); // Đưa import model lên đầu trang
 
+// Chức năng 1: Khởi tạo khảo sát động (AI-Driven)
 const initSurvey = async (req, res) => {
     try {
         const { 
@@ -11,106 +14,129 @@ const initSurvey = async (req, res) => {
             education, 
             location, 
             hobby,
+            fullName, 
             status,
             subject_scores,
             gpa,
-            userId
+            academicData,
+            userId: bodyUserId // Đổi tên để tránh trùng lặp biến
         } = req.body;
 
+        // 1. Validate input căn bản
+        if (!mode || !['Targeted', 'Discovery'].includes(mode)) {
+            return res.status(400).json({ success: false, message: 'mode phải là Targeted hoặc Discovery' });
+        }
+        if (mode === 'Targeted' && !target_career) {
+            return res.status(400).json({ success: false, message: 'target_career là bắt buộc khi mode = Targeted' });
+        }
 
-        // Lưu điểm người dùng
-        if (userId) {
-            await profileService.updateProfile(userId, {
-                fullName: req.body.name,
+        // Xác định userId từ header hoặc body
+        const activeUserId = req.headers['x-user-id'] || bodyUserId;
+
+        // 2. Kiểm tra giới hạn tokenTest TRƯỚC KHI xử lý khảo sát
+        let userInstance = null;
+        if (activeUserId) {
+            userInstance = await UserAccount.findByPk(activeUserId);
+            if (userInstance) {
+                if (userInstance.tokenTest <= 0) {
+                    return res.status(403).json({
+                        success: false,
+                        tokenLimit: true,
+                        message: 'Hết lượt làm bài test. Vui lòng nâng cấp hoặc mua thêm lượt.'
+                    });
+                }
+            }
+        }
+
+        // 3. Cập nhật thông tin profile người dùng nếu có userId
+        if (activeUserId) {
+            await profileService.updateProfile(activeUserId, { 
+                fullName: fullName, 
                 age,
                 educationLevel: education,
                 location,
-                hobby,
+                interests: hobby, 
                 studentScores: subject_scores,
-                workerScores: {
-                    gpa
-                }
+                workerScores: { gpa }
             });
         }
 
-
-        const result = await surveyService.initSurvey(
+        // 4. Gọi dịch vụ khởi tạo khảo sát duy nhất một lần
+        const result = await surveyService.initSurvey( 
             mode,
             target_career,
-            { 
-            age,
-            education,
-            location,
-            hobby,
-            status
-            },
-            {
-            scores: subject_scores,
-            gpa
-            }
+            { fullName, age, education, location, hobby, status }, 
+            academicData || { scores: subject_scores, gpa }
         );
 
-        res.status(200).json({
-            success:true,
+        // 5. Trừ token test thành công sau khi đã khởi tạo khảo sát thành công
+        if (userInstance) {
+            userInstance.tokenTest -= 1;
+            await userInstance.save();
+        }
+
+        // 6. Trả kết quả về cho client
+        return res.status(200).json({
+            success: true,
             ...result
         });
 
-    } catch(error){
-        res.status(500).json({
-            success:false,
-            message:error.message
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
         });
     }
-}
+};
 
+// Chức năng 2: Xử lý chấm điểm và trả về kết quả sơ bộ
 const submitSurvey = async (req, res) => {
     try {
         const { sessionId, answers } = req.body;
-        const userId = req.body.userId || req.headers['x-user-id'] || req.query.userId;
 
-        // Validate
-        if (!sessionId || !answers || !Array.isArray(answers)) {
-            return res.status(400).json({ success: false, message: 'Thiếu thông tin sessionId hoặc answers' });
+        if (!sessionId || !answers) {
+            return res.status(400).json({ success: false, message: 'Thiếu sessionId hoặc answers' });
         }
 
         const result = await surveyService.processSurveySubmit(sessionId, answers);
+        return res.status(200).json(result);
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
 
-        // Tự động claim kết quả và cập nhật UserProfile nếu người dùng đã đăng nhập
-        if (userId && result.requiresLogin) {
-            const claimRes = await claimAssessmentResult(sessionId, userId);
-            if (claimRes.success) {
-                return res.status(200).json({
-                    success: true,
-                    requiresLogin: false,
-                    sessionId,
-                    evaluation: claimRes.evaluation,
-                    profile: claimRes.profile
-                });
+// Chức năng 4: Đánh giá mức độ hài lòng (Feedback Loop)
+const feedbackSurvey = async (req, res) => {
+    try {
+        const { sessionId, ratingScore, comment, userId } = req.body;
+
+        if (!sessionId || !ratingScore) {
+            return res.status(400).json({ success: false, message: 'Thiếu sessionId hoặc ratingScore' });
+        }
+
+        // Lấy userId từ session context nếu không được cung cấp trực tiếp trong body
+        let actualUserId = userId;
+        if (!actualUserId) {
+            const sessionCtx = getSessionContext(sessionId);
+            if (sessionCtx && sessionCtx.userId) {
+                actualUserId = sessionCtx.userId;
             }
         }
 
-        res.status(200).json({ success: true, ...result });
+        const result = await surveyService.saveFeedback(sessionId, ratingScore, comment, actualUserId);
+        return res.status(200).json({ success: true, message: 'Đã gửi phản hồi thành công', feedback: result });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
     }
 };
 
-const feedbackSurvey = async (req, res) => {
-    try {
-        const { survey_id, rating_score, comment } = req.body;
-        const userId = req.body.userId || req.headers['x-user-id'] || null;
-
-        if (!survey_id || !rating_score) {
-            return res.status(400).json({ success: false, message: 'Thiếu thông tin survey_id hoặc rating_score' });
-        }
-
-        await surveyService.saveFeedback(survey_id, rating_score, comment, userId);
-        res.status(201).json({ success: true, message: 'Cảm ơn bạn đã gửi phản hồi!' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
+// Xuất bản (Export) các hàm ra ngoài để file Route có thể sử dụng
 module.exports = {
     initSurvey,
     submitSurvey,

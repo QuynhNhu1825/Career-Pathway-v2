@@ -88,6 +88,12 @@ interface TestEntry {
   title: string;
   date: string;
   type: string;
+  // Fields for targeted tests
+  basicSalary?: string;
+  laborMarket?: string;
+  roadmap?: any[];
+  companies?: any[]; // Đổi tên từ hiringCompanies để nhất quán với AI service và Results.tsx
+  trainingInstitutions?: any[]; // Đổi tên từ matchingSchools để nhất quán với AI service và Results.tsx
   [key: string]: any;
 }
 
@@ -99,69 +105,40 @@ const educationOptions = [
 ];
 
 const locationOptions = [
-  { value: "an_giang", label: "An Giang" },
-  { value: "ba_ria_vung_tau", label: "Bà Rịa - Vũng Tàu" },
-  { value: "bac_giang", label: "Bắc Giang" },
-  { value: "bac_kan", label: "Bắc Kạn" },
-  { value: "bac_lieu", label: "Bạc Liêu" },
+   { value: "an_giang", label: "An Giang" },
   { value: "bac_ninh", label: "Bắc Ninh" },
-  { value: "ben_tre", label: "Bến Tre" },
-  { value: "binh_dinh", label: "Bình Định" },
-  { value: "binh_duong", label: "Bình Dương" },
-  { value: "binh_phuoc", label: "Bình Phước" },
-  { value: "binh_thuan", label: "Bình Thuận" },
   { value: "ca_mau", label: "Cà Mau" },
   { value: "can_tho", label: "Cần Thơ" },
   { value: "cao_bang", label: "Cao Bằng" },
   { value: "da_nang", label: "Đà Nẵng" },
   { value: "dak_lak", label: "Đắk Lắk" },
-  { value: "dak_nong", label: "Đắk Nông" },
   { value: "dien_bien", label: "Điện Biên" },
   { value: "dong_nai", label: "Đồng Nai" },
   { value: "dong_thap", label: "Đồng Tháp" },
   { value: "gia_lai", label: "Gia Lai" },
-  { value: "ha_giang", label: "Hà Giang" },
-  { value: "ha_nam", label: "Hà Nam" },
   { value: "ha_noi", label: "Hà Nội" },
   { value: "ha_tinh", label: "Hà Tĩnh" },
-  { value: "hai_duong", label: "Hải Dương" },
   { value: "hai_phong", label: "Hải Phòng" },
-  { value: "hau_giang", label: "Hậu Giang" },
-  { value: "hoa_binh", label: "Hòa Bình" },
   { value: "hung_yen", label: "Hưng Yên" },
+  { value: "hue", label: "Huế" },
   { value: "khanh_hoa", label: "Khánh Hòa" },
-  { value: "kien_giang", label: "Kiên Giang" },
-  { value: "kon_tum", label: "Kon Tum" },
   { value: "lai_chau", label: "Lai Châu" },
   { value: "lam_dong", label: "Lâm Đồng" },
   { value: "lang_son", label: "Lạng Sơn" },
   { value: "lao_cai", label: "Lào Cai" },
-  { value: "long_an", label: "Long An" },
-  { value: "nam_dinh", label: "Nam Định" },
   { value: "nghe_an", label: "Nghệ An" },
   { value: "ninh_binh", label: "Ninh Bình" },
-  { value: "ninh_thuan", label: "Ninh Thuận" },
   { value: "phu_tho", label: "Phú Thọ" },
-  { value: "phu_yen", label: "Phú Yên" },
-  { value: "quang_binh", label: "Quảng Bình" },
-  { value: "quang_nam", label: "Quảng Nam" },
   { value: "quang_ngai", label: "Quảng Ngãi" },
   { value: "quang_ninh", label: "Quảng Ninh" },
   { value: "quang_tri", label: "Quảng Trị" },
-  { value: "soc_trang", label: "Sóc Trăng" },
   { value: "son_la", label: "Sơn La" },
   { value: "tay_ninh", label: "Tây Ninh" },
-  { value: "thai_binh", label: "Thái Bình" },
   { value: "thai_nguyen", label: "Thái Nguyên" },
   { value: "thanh_hoa", label: "Thanh Hóa" },
-  { value: "thua_thien_hue", label: "Thừa Thiên Huế" },
-  { value: "tien_giang", label: "Tiền Giang" },
   { value: "tp_hcm", label: "TP. Hồ Chí Minh" },
-  { value: "tra_vinh", label: "Trà Vinh" },
   { value: "tuyen_quang", label: "Tuyên Quang" },
   { value: "vinh_long", label: "Vĩnh Long" },
-  { value: "vinh_phuc", label: "Vĩnh Phúc" },
-  { value: "yen_bai", label: "Yên Bái" }
 ];
 
 interface ChatMessage { id: number; role: "user" | "ai"; text: string; }
@@ -239,6 +216,10 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
               type: item.mode === "discovery" ? "Discovery" : "Target",
               title: item.title || "Bài test không tên",
               date: formattedDate,
+              companies: item.companies || item.hiringCompanies || [], // Đảm bảo lấy từ 'companies' hoặc 'hiringCompanies'
+              trainingInstitutions: item.trainingInstitutions || item.matchingSchools || [], // Đảm bảo lấy từ 'trainingInstitutions' hoặc 'matchingSchools'
+              basicSalary: item.basicSalary, // Thêm trường basicSalary
+              laborMarket: item.laborMarket, // Thêm trường laborMarket
               score: item.relevanceScore || 0,
             };
           });
@@ -280,7 +261,14 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEnd = useRef<HTMLDivElement>(null);
-  const [remainingTokens, setRemainingTokens] = useState<number | null>(null);
+  const [remainingTokens, setRemainingTokens] = useState<number | null>(authUser.tokenCount !== undefined ? authUser.tokenCount : null);
+
+  // Update remainingTokens if authUser.tokenCount changes (e.g., after login or purchase)
+  useEffect(() => {
+    if (authUser.tokenCount !== undefined) {
+      setRemainingTokens(authUser.tokenCount);
+    }
+  }, [authUser.tokenCount]);
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -292,6 +280,12 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
 
     if (!user?.id) {
       setMessages((prev) => [...prev, { id: Date.now(), role: "ai", text: "Bạn cần đăng nhập để sử dụng AI Chat." }]);
+      return;
+    }
+
+    // Prevent sending message if no tokens are left
+    if (remainingTokens !== null && remainingTokens <= 0) {
+      setMessages((prev) => [...prev, { id: Date.now(), role: "ai", text: "Bạn đã hết lượt hỏi AI. Vui lòng kiểm tra lại tài khoản." }]);
       return;
     }
 
@@ -312,7 +306,9 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
         setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", text: data.message }]);
       } else {
         setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", text: data.answer }]);
-        setRemainingTokens(data.remainingTokens);
+        if (data.remainingTokens !== undefined) { // Ensure remainingTokens is present in the response
+          setRemainingTokens(data.remainingTokens);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -324,7 +320,7 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
   
   const handleSelectTest = (test: TestEntry) => {
     setSelectedTest(test);
-    setDetailTab(test.type === 'Discovery' ? 'suggestions' : 'answers');
+    setDetailTab(test.type === 'Discovery' ? 'suggestions' : 'market'); // Default to 'market' for Target tests
   };
 
   const handleBackToHistory = () => {
@@ -781,9 +777,9 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                       {detailTab === "schools" && (
                         <div>
                           <h3 className="font-bold text-gray-900 mb-4">Danh sách trường học được gợi ý</h3>
-                          {(selectedTest.matchingSchools && selectedTest.matchingSchools.length > 0) ? (
+                          {(selectedTest.trainingInstitutions && selectedTest.trainingInstitutions.length > 0) ? (
                             <div className="grid md:grid-cols-2 gap-4">
-                              {selectedTest.matchingSchools.map((school: any, index: number) => (
+                              {selectedTest.trainingInstitutions.map((school: any, index: number) => (
                                 <div key={index} className="p-4 border border-border rounded-xl flex flex-col bg-gray-50/50">
                                   <div className="flex-1">
                                     <h4 className="font-bold text-gray-900 text-base">{school.name}</h4>
@@ -813,8 +809,8 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                       {detailTab === "suggestions" && (
                         <div>
                           <h3 className="font-bold text-gray-900 mb-4">Danh sách nghề nghiệp được gợi ý</h3>
-                          <div className="grid md:grid-cols-2 gap-4">
-                            {(selectedTest.hiringCompanies || []).map((s: any, index: number) => (
+                          <div className="grid md:grid-cols-2 gap-4"> 
+                            {(selectedTest.companies || []).map((s: any, index: number) => (
                               <div key={index} className="p-4 border border-border rounded-xl flex flex-col bg-gray-50/50">
                                 <div className="flex-1">
                                   <div className="flex justify-between items-start mb-2">
@@ -823,7 +819,6 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                                       {selectedTest.relevanceScore?.toFixed(1) || "N/A"}/5.0
                                     </span>
                                   </div>
-                                  <p className="text-sm text-gray-600 mb-4">Công ty: {s.company}</p>
                                 </div>
                               </div>
                             ))}
@@ -839,7 +834,6 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                               {(selectedTest.roadmap || []).map((item: any, i: number) => (
                                 <div key={i} className={`p-4 rounded-xl border-2 ${i === 0 ? "border-amber-400 bg-amber-50" : "border-border bg-white"}`}>
                                   <div className="flex items-center gap-3 mb-3">
-                                    <span className="text-2xl">{item.icon}</span>
                                     <div>
                                       <p className="font-bold text-gray-900">{item.stage}</p>
                                       <p className="text-xs text-gray-500">{item.desc}</p>
@@ -863,33 +857,35 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                       {detailTab === "market" && (
                         <div className="space-y-6">
                           <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
-                            <div className="flex items-center gap-2 mb-6">
+                            {/* Tiêu đề */}
+                            <div className="flex items-center gap-2 mb-4">
                               <DollarSign className="h-5 w-5 text-amber-500" />
-                              <h3 className="font-bold text-gray-900 text-base">Mức lương theo cấp độ</h3>
+                              <h3 className="font-bold text-gray-900 text-base">Mức lương cơ bản</h3>
                             </div>
-                            <div className="space-y-5">
-                              {(selectedTest.marketSalaries || []).map((range: any, idx: number) => {
-                                const numbers = range.range ? range.range.match(/\d+/g) : null;
-                                const minVal = numbers && numbers[0] ? parseInt(numbers[0], 10) : 10;
-                                const maxVal = numbers && numbers[1] ? parseInt(numbers[1], 10) : 30;
-                                const minPercent = Math.min((minVal / 80) * 100, 100);
-                                const maxPercent = Math.min((maxVal / 80) * 100, 100);
 
-                                return (
-                                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full">
-                                    <span className="text-sm font-medium text-gray-600 w-40 shrink-0">{range.level}</span>
-                                    <div className="flex-1 bg-gray-100 rounded-full h-2.5 relative overflow-hidden">
-                                      <div className="absolute top-0 h-2.5 rounded-full bg-amber-100 transition-all duration-500" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
-                                      <div className="absolute top-0 h-2.5 rounded-full bg-amber-500 transition-all duration-500" style={{ left: `0%`, width: `${minPercent}%` }} />
-                                    </div>
-                                    <span className="text-xs font-semibold text-gray-700 w-28 shrink-0 text-left sm:text-right">
-                                      {range.range ? range.range.replace("triệu VNĐ", "M") : "Chưa cập nhật"}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                            {/* Khung hiển thị text của AI */}
+                            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-100">
+                              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">
+                                {selectedTest.basicSalary 
+                                  ? selectedTest.basicSalary 
+                                  : "Chưa cập nhật thông tin mức lương cho vị trí này."}
+                              </p>
                             </div>
                           </div>
+                          <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
+                            <div className="flex items-center gap-2 mb-4">
+                              <Briefcase className="h-5 w-5 text-amber-500" />
+                              <h3 className="font-bold text-gray-900 text-base">Tổng quan thị trường lao động</h3>
+                            </div>
+                            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-100">
+                              <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">
+                                {selectedTest.laborMarket
+                                  ? selectedTest.laborMarket
+                                  : "Chưa cập nhật thông tin thị trường lao động cho vị trí này."}
+                              </p>
+                            </div>
+                          </div>
+
 
                           <div className="bg-white rounded-2xl border border-border p-6 shadow-sm">
                             <div className="flex items-center gap-2 mb-6">
@@ -897,7 +893,7 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
                               <h3 className="font-bold text-gray-900 text-base">Cơ hội việc làm nổi bật</h3>
                             </div>
                             <div className="space-y-3.5">
-                              {(selectedTest.hiringCompanies || []).map((job: any, i: number) => {
+                              {(selectedTest.companies || []).map((job: any, i: number) => {
                                 const cleanRole = job.role ? job.role.replace(/\s*\(THPT\)\s*/g, "").trim() : "Chuyên viên nghiên cứu";
                                 const jobLink = job.careerLink || job.url || "https://www.topcv.vn";
 
@@ -990,7 +986,7 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
               <div className="px-3 pt-2 pb-1 bg-gray-50 flex flex-col gap-1.5 border-t border-gray-100">
                 <p className="text-[10px] text-gray-400 font-medium pl-1">Gợi ý cho bạn:</p>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pb-1">
-                  {["Làm sao để chọn đúng ngành?", "Xu hướng nghề nghiệp 2026 là gì?", "Ngành CNTT cần học những môn nào?"].map((question, idx) => (
+                  {["Làm sao để chọn đúng ngành?", "Xu hướng nghề nghiệp 2026 là gì?"].map((question, idx) => (
                     <button
                       key={idx}
                       onClick={() => {
@@ -1014,12 +1010,12 @@ export function Dashboard({ authUser, career, careerAnswers, onLogout, onHome }:
 
             <div className="p-3 bg-white border-t border-border flex items-center gap-2">
               <input
-                value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} disabled={isTyping || (remainingTokens !== null && remainingTokens <= 0)}
                 placeholder="Hỏi AI tư vấn..." className="flex-1 text-xs px-3 py-2 border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 bg-gray-50"
               />
               <button
-                onClick={sendMessage} disabled={!input.trim()}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${input.trim() ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                onClick={sendMessage} disabled={!input.trim() || isTyping || (remainingTokens !== null && remainingTokens <= 0)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${(!input.trim() || isTyping || (remainingTokens !== null && remainingTokens <= 0)) ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-amber-500 hover:bg-amber-600 text-white"}`}
               >
                 <Send className="h-3.5 w-3.5" />
               </button>

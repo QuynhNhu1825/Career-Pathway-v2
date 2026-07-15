@@ -32,20 +32,12 @@ const KetQuaDiscoveryHoc = sequelize.define('KetQuaDiscoveryHoc', {
     type: DataTypes.DECIMAL(4, 2),
     allowNull: true,
   },
-  benchmark2022: {
-    type: DataTypes.DECIMAL(4, 2),
-    allowNull: true,
-  },
   officialLink: {
     type: DataTypes.STRING(500),
     allowNull: true,
   },
   admissionLink: {
     type: DataTypes.STRING(500),
-    allowNull: true,
-  },
-  benchmark2025: {
-    type: DataTypes.DECIMAL(4, 2),
     allowNull: true,
   },
   sessionId: {

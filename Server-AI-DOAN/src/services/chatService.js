@@ -4,9 +4,9 @@ const { getGenerativeModelWithFallback, extractJsonFromText } = require("./gemin
 const model = getGenerativeModelWithFallback({
     model: "gemini-2.5-flash",
     generationConfig: { 
-        temperature: 0.7,
-        responseMimeType: "application/json"
-    }
+        temperature: 0.7
+    },
+    tools: [{ googleSearch: {} }]
 });
 
 const askChatbot = async (userId, question) => {
@@ -96,16 +96,18 @@ const askChatbot = async (userId, question) => {
         user.tokenCount -= 1;
         await user.save();
 
-        const prompt = `Bạn là chuyên gia tư vấn hướng nghiệp xuất sắc. Bạn đang trò chuyện và định hướng sự nghiệp cho một người dùng.
+        const { Prompt } = require("../models");
+        let chatbotPromptText = `Bạn là chuyên gia tư vấn hướng nghiệp xuất sắc. Bạn đang trò chuyện và định hướng sự nghiệp cho một người dùng.
 Dưới đây là thông tin và kết quả từ các bài test/khảo sát gần đây của người dùng:
-${userContextInfo || '(Không có kết quả test trước đó)'}
+{{userContextInfo}}
 
-Người dùng gửi tin nhắn/lựa chọn như sau: "${question}"
+Người dùng gửi tin nhắn/lựa chọn như sau: "{{question}}"
 
 YÊU CẦU:
 1. Hãy đọc kỹ thông tin và câu hỏi/lựa chọn của họ để đưa ra câu trả lời tư vấn sâu sắc, ngắn gọn, truyền cảm hứng.
 2. Đưa ra các gợi ý câu hỏi nhanh hoặc định hướng tiếp theo để dẫn dắt họ khám phá sâu hơn (Ví dụ: đề xuất họ tìm hiểu sâu hơn về một ngành nghề, lộ trình học tập, hoặc gợi ý tìm hiểu về một trường đào tạo cụ thể trong kết quả test của họ).
 3. Đưa ra đúng từ 3 đến 4 đáp án gợi ý sẵn (dạng câu trả lời ngắn hoặc lựa chọn hành động) để người dùng có thể nhấp chọn ở lượt tiếp theo (ví dụ: "Tìm hiểu lộ trình ngành CNTT", "Xem thông tin tuyển sinh Đại học Bách Khoa", "Hỏi chuyên gia về ngành nghề khác").
+4. QUY TẮC THANG ĐIỂM 30: Nếu người dùng hỏi về điểm chuẩn của các trường Đại học/Cao đẳng, BẮT BUỘC trả về theo thang điểm tốt nghiệp THPT Quốc gia truyền thống (tối đa là 30.0). Nếu trường dùng thang 100 (như Bách khoa TP.HCM) hoặc nhân hệ số (thang 40), hãy tự động quy đổi tương đương về thang điểm 30.
 
 Hãy trả về định dạng JSON chuẩn xác như sau:
 {
@@ -117,8 +119,23 @@ Hãy trả về định dạng JSON chuẩn xác như sau:
   ]
 }
 Chỉ trả về JSON, không kèm bất kỳ markdown hay text giải thích nào khác.`;
+
+        try {
+            const dbPrompt = await Prompt.findOne({ where: { MaPrompt: 101, TrangThaiHD: true } });
+            if (dbPrompt && dbPrompt.NoiDung) {
+                chatbotPromptText = dbPrompt.NoiDung;
+            }
+        } catch (dbErr) {
+            console.error("[Chatbot] Lỗi đọc prompt từ DB, sử dụng mặc định:", dbErr);
+        }
+
+        const finalPrompt = chatbotPromptText
+            .replace(/\{\{userContextInfo\}\}/g, userContextInfo || '(Không có kết quả test trước đó)')
+            .replace(/\{\{question\}\}/g, question)
+            .replace(/\$\{userContextInfo\}/g, userContextInfo || '(Không có kết quả test trước đó)')
+            .replace(/\$\{question\}/g, question);
         
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent(finalPrompt);
         let text = result.response.text().trim();
 
         let parsedResult = extractJsonFromText(text);

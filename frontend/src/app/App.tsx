@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { Hero } from "./components/Hero";
 import { Services } from "./components/Services";
@@ -16,7 +16,7 @@ import { CareerRecommendation } from "./screens/CareerRecommendation";
 import PrivacyPolicy from "./screens/PrivacyPolicy";
 import UserGuide from "./screens/UserGuide";
 import AboutSystem from "./screens/AboutSystem";
-
+import AdminModule from "./admin/AdminModule";
 // Khai báo biến API_URL dự phòng nếu chưa định nghĩa trong cấu hình dự án
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -31,7 +31,8 @@ export type Screen =
   | "career-recommendation"
   | "privacy-policy"
   | "user-guide"
-  | "about-system";
+  | "about-system"
+  | "admin";
 
 export type AssessmentMode = "targeted" | "discovery";
 
@@ -68,6 +69,7 @@ export interface AuthUser {
   role: string;
   isActive: boolean;
   profile?: any;
+  tokenCount?: number;
 }
 
 type EvaluationResult = any;
@@ -85,6 +87,16 @@ export default function App() {
   const [claimedEvaluation, setClaimedEvaluation] = useState<EvaluationResult | null>(null);
   const [recommendedCareer, setRecommendedCareer] = useState<string | null>(null);
 
+  useEffect(() => {
+    const path = window.location.pathname.replace(/^\/|\/$/g, ""); 
+    
+    if (path === "admin") {
+      setScreen("admin");
+    } else if (path === "privacy-policy") {
+      setScreen("privacy-policy");
+    }
+    // Bạn có thể bắt thêm các đường dẫn khác tương tự ở đây
+  }, []);
   const navigate = (s: Screen) => {
     setScreen(s);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -134,7 +146,6 @@ export default function App() {
             educationLevel: data.education,
             location: data.location,
             interests: data.hobby,
-            studyStatus: data.status,
           };
 
           if (data.studentScores) {
@@ -205,13 +216,63 @@ export default function App() {
   if (screen === "auth-gate") {
     return (
       <AuthGate
+        sessionId={sessionId} 
+        userData={userData}
         onLogin={(user) => {
+          // 1. Lưu tạm user vào state và localStorage trước
           setAuthUser(user);
           localStorage.setItem("user", JSON.stringify(user));
-          if (mode === 'discovery') {
-            navigate("career-recommendation");
+
+          if (userData) {
+            const profileUpdatePayload: any = {
+              fullName: userData.name,
+              age: userData.age,
+              educationLevel: userData.education,
+              location: userData.location,
+              interests: userData.hobby,
+            };
+
+            if (userData.studentScores) profileUpdatePayload.studentScores = userData.studentScores;
+            if (userData.workerScores) profileUpdatePayload.workerScores = userData.workerScores;
+
+            // 2. Gọi API đồng bộ thông tin từ userData lên tài khoản vừa mới tạo/đăng nhập
+            fetch(`${API_URL}/api/profile/${user.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(profileUpdatePayload),
+            })
+              .then(res => res.json())
+              .then(result => {
+                if (result.success) {
+                  const mergedProfile = { ...user.profile, ...profileUpdatePayload, ...result.profile };
+                  const updatedUser = { ...user, profile: mergedProfile };
+                  setAuthUser(updatedUser);
+                  localStorage.setItem("user", JSON.stringify(updatedUser));
+                } else {
+                  console.error("Failed to sync profile data:", result.message);
+                }
+
+                // 🔥 ĐÃ CHUYỂN VÀO ĐÂY: Chỉ chuyển trang khi Backend Node.js đã đồng bộ xong xuôi
+                if (mode === 'discovery') {
+                  navigate("career-recommendation");
+                } else {
+                  navigate("results");
+                }
+              })
+              .catch(err => {
+                console.error("Error syncing profile data:", err);
+                if (mode === 'discovery') {
+                  navigate("career-recommendation");
+                } else {
+                  navigate("results");
+                }
+              });
           } else {
-            navigate("results");
+            if (mode === 'discovery') {
+              navigate("career-recommendation");
+            } else {
+              navigate("results");
+            }
           }
         }}
         onBack={() => navigate("assessment")}
@@ -293,6 +354,7 @@ export default function App() {
   if (screen === "dashboard") {
     if (!authUser) {
       navigate("home");
+    
       return null;
     }
     return (
@@ -320,6 +382,10 @@ export default function App() {
 
   if (screen === "about-system") {
     return <AboutSystem onBack={() => navigate("home")} />;
+  }
+
+  if (screen === "admin") {
+    return <AdminModule />;
   }
 
   return null;

@@ -15,6 +15,11 @@ const Prompt = sequelize.define('Prompt', {
     type: DataTypes.STRING(255),
     allowNull: true,
   },
+  MoTaPhu: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'MoTaPhu'
+  },
   NoiDung: {
     type: DataTypes.TEXT,
     allowNull: false,

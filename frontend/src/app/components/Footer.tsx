@@ -97,7 +97,7 @@ export function Footer({ onPrivacy, onGuide, onAbout }: FooterProps) {
               {[
                 { text: "Trang chủ", href: "#home" },
                 { text: "Tính năng", href: "#features" },
-                { text: "Tư vấn nhanh", href: "#quickcareer" },
+                { text: "Tìm hiểu nhanh", href: "#quickcareer" },
                 { text: "Khám phá", href: "#assessment" },
               ].map((item) => (
                 <ListItem key={item.text} disablePadding>

@@ -247,8 +247,8 @@ export function CareerRecommendation({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          survey_id: sessionId,
-          rating_score: rating,
+          sessionId: sessionId,
+          ratingScore: rating,
           comment: feedback,
           userId: authUser.id,
         }),
@@ -605,9 +605,7 @@ export function CareerRecommendation({
                                 <Typography fontWeight={700} variant="body2">{school.schoolName}</Typography>
                                 
                                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                                  Điểm chuẩn: 2025: {school.benchmark2025 ?? "Chưa rõ"} | 2024:{" "}
-                                  {school.benchmark2024 ?? "Chưa rõ"} | 2023:{" "}
-                                  {school.benchmark2023 ?? "Chưa rõ"}
+                                  Điểm chuẩn: 2025: {school.benchmark2025 ?? "Chưa rõ"}
                                 </Typography>
                              
                                 <Stack direction="row" spacing={1} mt={1}>
