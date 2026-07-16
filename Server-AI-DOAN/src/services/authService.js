@@ -17,6 +17,8 @@ const checkLogin = async (email, password, sessionId = null) => {
       return { success: false, message: 'Tài khoản không tồn tại' };
     }
 
+    
+    // Ngăn đăng nhập bằng pass nếu tài khoản tạo qua Google/Facebook mà chưa setup pass
     if (!user.passwordHash) {
       return { success: false, message: 'Tài khoản không có mật khẩu, vui lòng liên hệ hỗ trợ' };
     }
@@ -107,10 +109,82 @@ const checkLogin = async (email, password, sessionId = null) => {
 };
 
 /**
+ * Hàm xử lý đăng nhập qua Google hoặc Facebook
+ * @param {string} provider - 'google' hoặc 'facebook'
+ * @param {string} providerId - ID duy nhất từ Google/Facebook
+ * @param {string} email - Email từ Google/Facebook
+ * @param {string} displayName - Tên hiển thị người dùng
+ * @param {string} avatarUrl - URL ảnh đại diện
+ */
+/* [TẠM ẨN - Chức năng Social Login]
+const socialLogin = async (provider, providerId, email, displayName, avatarUrl) => {
+  try {
+    let user;
+
+    // 1. Tìm user theo provider ID
+    if (provider === 'google') {
+      user = await UserAccount.findOne({ where: { googleId: providerId } });
+    } else if (provider === 'facebook') {
+      user = await UserAccount.findOne({ where: { facebookId: providerId } });
+    }
+
+    // 2. Nếu chưa có, thử tìm qua email (người dùng đã tạo acc bằng email trước đó)
+    if (!user && email) {
+      user = await UserAccount.findOne({ where: { email } });
+      if (user) {
+        // Cập nhật link tài khoản social vào account cũ
+        if (provider === 'google') user.googleId = providerId;
+        if (provider === 'facebook') user.facebookId = providerId;
+        await user.save();
+      }
+    }
+
+    // 3. Nếu vẫn không có -> Tài khoản mới tinh, tiến hành tạo mới
+    if (!user) {
+      user = await UserAccount.create({
+        // Nếu Facebook ko cấp quyền lấy email thì sinh email tạm
+        email: email || `${providerId}@${provider}.local`, 
+        passwordHash: null, // Không cần pass
+        googleId: provider === 'google' ? providerId : null,
+        facebookId: provider === 'facebook' ? providerId : null,
+        authProvider: provider,
+        isEmailVerified: true, // Trust social provider
+        lastLoginAt: new Date(),
+      });
+
+      // Tự động tạo một Profile cho user mới
+      await UserProfile.create({
+        userId: user.id,
+        fullName: displayName || '',
+      });
+    } else {
+      // 4. Nếu đã có tài khoản thì chỉ cập nhật lastLogin
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
+    return {
+      success: true,
+      message: `Đăng nhập qua ${provider} thành công`,
+      user: { id: user.id, email: user.email, role: user.role, authProvider: user.authProvider }
+    };
+
+  } catch (error) {
+    console.error(`Lỗi đăng nhập qua ${provider}:`, error);
+    return { success: false, message: 'Lỗi hệ thống khi xử lý đăng nhập mạng xã hội' };
+  }
+};
+*/
+
+/**
  * Hàm đăng ký tài khoản mới bằng Email / Password
+ * @param {string} email - Email đăng ký
+ * @param {string} password - Mật khẩu
+ * @param {string} fullName - Tên đầy đủ
  */
 const register = async (email, password, fullName, sessionId) => {
   try {
+    // 1. Kiểm tra xem email đã tồn tại chưa
     const existingUser = await UserAccount.findOne({ where: { email } });
     if (existingUser) {
       return { success: false, message: 'Email này đã được sử dụng' };

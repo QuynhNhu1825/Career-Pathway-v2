@@ -603,10 +603,6 @@ export function CareerRecommendation({
                             <Grid size={{ xs: 12, sm: 6, md: 4 }} key={i}>
                               <Paper sx={{ p: 2, borderRadius: 3, bgcolor: "#fff7ed", height: "100%" }}>
                                 <Typography fontWeight={700} variant="body2">{school.schoolName}</Typography>
-                                
-                                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                                  Điểm chuẩn: 2025: {school.benchmark2025 ?? "Chưa rõ"}
-                                </Typography>
                              
                                 <Stack direction="row" spacing={1} mt={1}>
                                   {school.officialLink && (

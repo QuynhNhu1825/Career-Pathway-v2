@@ -7,8 +7,13 @@ const { searchCareerQuickly } = require('../src/services/searchService');
     try {
         const input = {
             mode: 'HOC',
+<<<<<<< HEAD
             industry: 'nhạc sĩ',
             location: 'Đà Nẵng',
+=======
+            school: 'Trường Đại học Bách khoa - ĐHQG TP.HCM',
+            industry: 'công nghệ thông tin',
+>>>>>>> 9617ffad3143e8a5877c65a94bb509907c4c614a
             age: 18
         };
         console.log("Input data:", JSON.stringify(input, null, 2));

@@ -400,6 +400,12 @@ const getHistory = async (userId) => {
                     if (sessionLam.length > 0) {
                         // Đảm bảo basicSalary và laborMarket được gán đúng cách
                         // và careerRoadmap được parse từ JSON string
+                        // Thêm dòng này để trích xuất careerRoadmap cho mode 'target'
+                        try {
+                            actualRoadmap = sessionLam[0].careerRoadmap ? JSON.parse(sessionLam[0].careerRoadmap) : [];
+                        } catch (e) {
+                            actualRoadmap = [];
+                        }
                         
                         basicSalary = sessionLam[0].basicSalary || null;
                         laborMarket = sessionLam[0].laborMarket || null;
@@ -476,30 +482,42 @@ const getHistory = async (userId) => {
                 // Xây dựng danh sách trường học và công ty phù hợp
                 let matchingSchools = [];
                 if (mode === 'discovery') {
-                    matchingSchools = discHocList.filter(item => item.sessionId === q.sessionId).map(item => ({
-                        name: item.schoolName,
-                        major: item.careerName,
-                        location: profile?.location || 'Việt Nam',
-                        score: `Điểm chuẩn: ${item.benchmark2025 || item.benchmark2024 || 'N/A'}`,
-                        officialLink: item.officialLink || null,
-                        admissionLink: item.admissionLink || null
-                    }));
+                    matchingSchools = discHocList.filter(item => item.sessionId === q.sessionId).map(item => {
+                        const benchmarkValue = item.benchmark2025 || item.benchmark2024;
+                        const benchmarkDisplay = benchmarkValue ? `${benchmarkValue}đ` : 'N/A';
+                        return {
+                            name: item.schoolName,
+                            major: item.careerName,
+                            location: profile?.location || 'Việt Nam',
+                            benchmark: benchmarkDisplay,
+                            benchmarkYear: item.benchmark2025 ? 2025 : (item.benchmark2024 ? 2024 : null),
+                            // Đảm bảo officialLink luôn là đối tượng { url: string, ... } hoặc null
+                            officialLink: item.officialLink ? { url: item.officialLink, title: null, domain: null } : null,
+                            admissionLink: item.admissionLink || null
+                        };
+                    });
                 } else if (mode === 'target') {
-                    matchingSchools = targetHocList.filter(item => item.sessionId === q.sessionId).map(item => ({
-                        name: item.schoolName,
-                        major: item.careerName,
-                        location: profile?.location || 'Việt Nam',
-                        score: `Điểm chuẩn: ${item.benchmark2025 || item.benchmark2024 || 'N/A'}`,
-                        officialLink: item.officialLink || null,
-                        admissionLink: item.admissionLink || null
-                    }));
+                    matchingSchools = targetHocList.filter(item => item.sessionId === q.sessionId).map(item => {
+                        const benchmarkValue = item.benchmark2025 || item.benchmark2024;
+                        const benchmarkDisplay = benchmarkValue ? `${benchmarkValue}đ` : 'N/A';
+                        return {
+                            name: item.schoolName,
+                            major: item.careerName,
+                            location: profile?.location || 'Việt Nam',
+                            benchmark: benchmarkDisplay,
+                            benchmarkYear: item.benchmark2025 ? 2025 : (item.benchmark2024 ? 2024 : null),
+                            // Đảm bảo officialLink luôn là đối tượng { url: string, ... } hoặc null
+                            officialLink: item.officialLink ? { url: item.officialLink, title: null, domain: null } : null,
+                            admissionLink: item.admissionLink || null
+                        };
+                    });
                 }
                 if (matchingSchools.length === 0) {
                     if (isStudent) { // Nếu là học sinh, cung cấp fallback trường
-                        matchingSchools = [
-                            { name: "Đại học Bách Khoa", major: recommendedCareer, location: "Hà Nội/TP.HCM", score: "Điểm chuẩn:25", officialLink: null, admissionLink: null },
-                            { name: "Đại học Quốc Gia", major: recommendedCareer, location: "Hà Nội/TP.HCM", score: "Điểm chuẩn: 24.8", officialLink: null, admissionLink: null },
-                            { name: "Đại học RMIT / FPT", major: recommendedCareer, location: "Toàn quốc", score: "Xét tuyển/Học bạ", officialLink: null, admissionLink: null }
+                        matchingSchools = [ // Updated fallback to match new structure
+                            { name: "Đại học Bách Khoa", major: recommendedCareer, location: "Hà Nội/TP.HCM", benchmark: "25đ", benchmarkYear: 2025, officialLink: null, admissionLink: null }, // Fallback có thể giữ null
+                            { name: "Đại học Quốc Gia", major: recommendedCareer, location: "Hà Nội/TP.HCM", benchmark: "24.8đ", benchmarkYear: 2025, officialLink: null, admissionLink: null }, // Fallback có thể giữ null
+                            { name: "Đại học RMIT / FPT", major: recommendedCareer, location: "Toàn quốc", benchmark: "N/A", benchmarkYear: null, officialLink: null, admissionLink: null } // Fallback có thể giữ null
                         ];
                     } else { // Nếu không phải học sinh (người đi làm), không có fallback trường
                         matchingSchools = [];
@@ -529,7 +547,7 @@ const getHistory = async (userId) => {
                     }));
                 }
                 if (hiringCompanies.length === 0) {
-                    hiringCompanies = [ // Fallback nếu không tìm thấy công ty cụ thể
+                    hiringCompanies = [
                         { role: `Chuyên viên ${recommendedCareer}`, company: "FPT Software / Telecom", loc: "Toàn quốc", type: "Toàn thời gian", salary: null, description: null },
                         { role: `Kỹ sư / Nhân sự ${recommendedCareer}`, company: "Tập đoàn Viettel", loc: "Hà Nội", type: "Toàn thời gian", salary: null, description: null },
                         { role: `Chuyên gia ${recommendedCareer}`, company: "Các công ty đa quốc gia", loc: "TP. HCM", type: "Toàn thời gian", salary: null, description: null }
@@ -541,10 +559,9 @@ const getHistory = async (userId) => {
                 let finalRoadmap = [];
                 if (!isStudent) { 
                     // Nếu KHÔNG PHẢI học sinh cấp 3 (tức là sinh viên Cao đẳng/Đại học hoặc người đi làm)
-                    finalRoadmap = roadmap.length > 0 ? roadmap : meta.roadmap;
-                } else {
-                    // Nếu là học sinh cấp 3 -> Ẩn lộ trình nghề nghiệp (để mảng rỗng)
-                    finalRoadmap = []; 
+                    finalRoadmap = actualRoadmap.length > 0 ? actualRoadmap : meta.roadmap; // actualRoadmap is only populated for non-students in target mode
+                } else { // Nếu là học sinh cấp 3, sử dụng roadmap mặc định từ meta
+                    finalRoadmap = meta.roadmap;
                 }
                 sessionsMap[q.sessionId] = {
                     sessionId: q.sessionId,

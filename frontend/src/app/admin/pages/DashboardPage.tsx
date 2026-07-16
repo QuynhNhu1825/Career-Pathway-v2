@@ -306,6 +306,8 @@ export function DashboardPage() {
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
+      </Box>
+
       <Box width={"100%"} height={280}>
         <ChartCard
           title="Hiệu suất AI"
@@ -366,7 +368,6 @@ export function DashboardPage() {
             ))}
           </Box>
         </ChartCard>
-        </Box>
       </Box>
 
       {/* Hoạt động gần đây */}

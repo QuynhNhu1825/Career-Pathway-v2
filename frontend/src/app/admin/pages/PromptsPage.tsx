@@ -703,18 +703,12 @@ export function PromptsPage() {
                       />
                     </TableCell>
 
-                    <TableCell sx={{ minWidth: "120px" }}> {/* Đảm bảo ô luôn rộng tối thiểu 120px */}
-                      <Typography 
-                        sx={{ 
-                          fontSize: 13, 
-                          color: textMuted,
-                          whiteSpace: "nowrap" // Ép ngày tháng luôn nằm trên 1 dòng, không bao giờ bị tự động xuống dòng bừa bãi
-                        }}
-                      >
-                        {prompt.createdAt}
+                    <TableCell>
+                      <Typography sx={{ fontSize: 13, color: textMuted, whiteSpace: "nowrap" }}>
+                          {prompt.createdAt ? new Date(prompt.createdAt).toLocaleDateString("vi-VN") : "—"}
                       </Typography>
                     </TableCell>
-
+                    
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                         <Button

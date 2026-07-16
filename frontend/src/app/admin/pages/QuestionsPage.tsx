@@ -226,17 +226,12 @@ export function QuestionsPage() {
                       </Typography>
                     </TableCell>
 
-                    <TableCell sx={{ minWidth: "120px" }}> {/* Đảm bảo ô luôn rộng tối thiểu 120px */}
-                      <Typography 
-                        sx={{ 
-                          fontSize: 13, 
-                          color: textMuted,
-                          whiteSpace: "nowrap" // Ép ngày tháng luôn nằm trên 1 dòng, không bao giờ bị tự động xuống dòng bừa bãi
-                        }}
-                      >
-                        {question.ngayTao}
-                      </Typography>
+                    <TableCell>
+                      <Typography sx={{ fontSize: 13, color: textMuted, whiteSpace: "nowrap" }}>
+                          {question.ngayTao ? new Date(question.ngayTao).toLocaleDateString("vi-VN") : "—"}
+                        </Typography>
                     </TableCell>
+                    
                     <TableCell align="right">
                       <Button
                         variant="text"

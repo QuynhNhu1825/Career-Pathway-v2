@@ -476,8 +476,8 @@ async function claimAssessmentResult(sessionId, userId) {
                   companyDescription: normalizeTextField(comp.companyDescription || comp.description),
                   careerLink: normalizeTextField(comp.careerLink || comp.link),
                   basicSalary: normalizeTextField(comp.basicSalary || comp.salary),
-                  laborMarket: normalizeTextField(comp.laborMarket),
-                  careerRoadmap: normalizeTextField(evaluation.roadmap)
+                  laborMarket: normalizeTextField(comp.laborMarket || evaluation.laborMarket),
+                  careerRoadmap: normalizeTextField(comp.careerRoadmap || evaluation.careerRoadmap || comp.roadmap)
                 });
               }
             }

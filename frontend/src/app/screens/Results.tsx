@@ -450,14 +450,6 @@ export function Results({
                           
                           {school.description && <Typography variant="body2" color="text.secondary" sx={{ mb: 2, minHeight: 40 }}>{school.description}</Typography>}
 
-                          <Chip 
-                            icon={<TrendingUp />} 
-                            label={`Điểm chuẩn: ${getBenchmarkString(school)}`} 
-                            color="primary" 
-                            variant="outlined"
-                            sx={{ fontWeight: 'medium', mb: 2, alignSelf: 'flex-start' }}
-                          />
-
                           <Stack direction="row" spacing={1} sx={{ mt: 'auto' }}>
                             {school.officialLink && (
                               <Button size="small" variant="text" href={school.officialLink} target="_blank" startIcon={<Home sx={{ fontSize: 16 }} />}>

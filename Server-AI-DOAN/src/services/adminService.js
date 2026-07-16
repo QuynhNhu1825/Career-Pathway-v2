@@ -177,6 +177,16 @@ const getDashboardStats = async () => {
       limit: 3
     });
     const recentFeedbacks = await SurveyFeedback.findAll({
+      include: [{
+        model: Taikhoan,
+        as: 'Taikhoan',
+        attributes: ['email'],
+        include: [{
+          model: NguoiDung,
+          as: 'Profile',
+          attributes: ['fullName']
+        }]
+      }],
       order: [['id', 'DESC']],
       limit: 2
     });
@@ -188,14 +198,20 @@ const getDashboardStats = async () => {
         id: `act_user_${p.userId}`,
         user: p.fullName || 'Người dùng ẩn danh',
         action: 'đã đăng ký tài khoản thành viên mới',
-        time: 'Vừa xong'
+        time: 'Hôm nay'
       });
     }
 
     for (const fb of recentFeedbacks) {
+      const userName = fb.Taikhoan && fb.Taikhoan.Profile && fb.Taikhoan.Profile.fullName
+        ? fb.Taikhoan.Profile.fullName
+        : fb.Taikhoan && fb.Taikhoan.email
+        ? fb.Taikhoan.email.split('@')[0] // Use email prefix if name not available
+        : `Khách hàng (ID: ${fb.userId || 'Khách'})`;
       recentActivities.push({
         id: `act_fb_${fb.id}`,
         user: `Khách hàng (ID: ${fb.userId || 'Khách'})`,
+        user: userName,
         action: `đã gửi feedback khảo sát: "${fb.comment || 'Hài lòng'}" (${fb.ratingScore} sao)`,
         time: 'Hôm nay'
       });

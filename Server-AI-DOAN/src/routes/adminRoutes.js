@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const jwt = require('jsonwebtoken'); // Import jsonwebtoken
-const { JWT_SECRET } = process.env; // Lấy JWT_SECRET từ biến môi trường
+const { verifyAdmin } = require('../middlewares/authMiddleware');
 
 // Middleware xác thực quyền Admin (sử dụng JWT)
 const checkAdminAuth = async (req, res, next) => {
@@ -14,9 +13,8 @@ const checkAdminAuth = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    if (!JWT_SECRET) {
-      throw new Error('JWT_SECRET không được định nghĩa trong biến môi trường.');
-    }
+    const jwt = require('jsonwebtoken');
+    const { JWT_SECRET } = require('../middlewares/authMiddleware');
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
