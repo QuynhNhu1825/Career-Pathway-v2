@@ -272,7 +272,7 @@ export function DashboardPage() {
         {/* Sửa lại BarChart để đảm bảo an toàn thuộc tính dữ liệu */}
         <ChartCard
           title="Hoạt động khảo sát"
-          description="Số lượng khảo sát hoàn thành theo tháng"
+          description="Số lượng khảo sát hoàn thành theo ngày"
         >
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={surveyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -287,7 +287,7 @@ export function DashboardPage() {
 
         <ChartCard
           title="Số lượng người dùng quan tâm"
-          description="Số người dùng quan tâm theo tháng"
+          description="Số người dùng quan tâm theo ngày"
         >
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={careerTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -306,7 +306,7 @@ export function DashboardPage() {
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
-      <Box sx={{ width: "100%" }}>
+      <Box width={"100%"} height={280}>
         <ChartCard
           title="Hiệu suất AI"
           description="Các chỉ số hiệu suất hệ thống AI"

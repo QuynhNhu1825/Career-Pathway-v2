@@ -46,6 +46,11 @@ const industrySuggestions = [
   "Truyền thông đa phương tiện"
 ];
 
+interface SchoolData {
+  name: string;
+  location: string;
+}
+
 const locationOptions = [
   {value:"Toàn quốc", label:"Toàn quốc"},
   { value: "An Giang", label: "An Giang" },
@@ -84,34 +89,195 @@ const locationOptions = [
   { value: "Vĩnh Long", label: "Vĩnh Long" }
 ]
 
-const sampleDataByIndustry: Record<string, { schools: string[]; jobs: string[] }> = {
+const sampleDataByIndustry: Record<string, { schools: SchoolData[]; jobs: string[] }> = {
   "Công nghệ thông tin": {
-    schools: ["Đại học Bách Khoa Hà Nội", "Đại học Bách khoa - ĐH Đà Nẵng", "Đại học Công nghệ thông tin", "Đại học FPT", "Cao đẳng Kỹ thuật Cao Thắng"],
-    jobs: ["Lập trình viên Frontend/Backend", "Kỹ sư DevOps", "Chuyên viên Kiểm thử (Tester)", "Kỹ sư Hệ thống Cloud"]
+    schools: [
+      { name: "Đại học Bách khoa Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Công nghệ - ĐHQG Hà Nội", location: "Hà Nội" },
+      { name: "Học viện Công nghệ Bưu chính Viễn thông (Cơ sở phía Bắc)", location: "Hà Nội" },
+      { name: "Trường Đại học Bách khoa - ĐH Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Trường Đại học Công nghệ thông tin - ĐHQG TP.HCM", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Bách khoa - ĐHQG TP.HCM", location: "TP. Hồ Chí Minh" },
+      { name: "Học viện Công nghệ Bưu chính Viễn thông (Cơ sở phía Nam)", location: "TP. Hồ Chí Minh" },
+      { name: "Đại học FPT", location: "Toàn quốc" },
+      // Phủ các tỉnh thành khác
+      { name: "Trường Đại học Sư phạm Kỹ thuật Hưng Yên", location: "Hưng Yên" },
+      { name: "Trường Đại học CNTT & Truyền thông - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Đại học Hàng hải Việt Nam", location: "Hải Phòng" },
+      { name: "Trường Đại học Quy Nhơn", location: "Quảng Ngãi" }, // Tuyển sinh mạnh khu vực Nam Trung Bộ
+      { name: "Trường Đại học Nha Trang", location: "Khánh Hòa" },
+      { name: "Trường Đại học Cần Thơ", location: "Cần Thơ" },
+      { name: "Trường Đại học Sư phạm Kỹ thuật Vĩnh Long", location: "Vĩnh Long" },
+      { name: "Trường Đại học Lạc Hồng", location: "Đồng Nai" },
+      { name: "Trường Đại học An Giang - ĐHQG TP.HCM", location: "An Giang" }
+    ],
+    jobs: ["Lập trình viên Frontend/Backend", "Kỹ sư DevOps", "Chuyên viên Kiểm thử (Tester)", "Kỹ sư Hệ thống Cloud", "Kỹ sư An toàn thông tin"]
   },
-  "Trí tuệ nhân tạo (AI)": {
-    schools: ["Đại học Bách Khoa Hà Nội", "Đại học Công nghệ thông tin - ĐHQG TP.HCM", "Đại học VinUniversity", "Đại học FPT"],
-    jobs: ["Kỹ sư AI/ML (Machine Learning)", "Kỹ sư Dữ liệu (Data Engineer)", "Chuyên viên Phân tích Dữ liệu (Data Analyst)"]
+  "Marketing & Kinh doanh": {
+    schools: [
+      { name: "Trường Đại học Kinh tế Quốc dân", location: "Hà Nội" },
+      { name: "Trường Đại học Ngoại thương (Cơ sở 1)", location: "Hà Nội" },
+      { name: "Trường Đại học Thương mại", location: "Hà Nội" },
+      { name: "Trường Đại học Kinh tế - ĐH Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Đại học Kinh tế TP.HCM (UEH)", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Ngoại thương (Cơ sở 2)", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học RMIT Việt Nam", location: "Toàn quốc" },
+      // Phủ các tỉnh thành khác
+      { name: "Trường Đại học Kinh tế & Quản trị Kinh doanh - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Đại học Kinh tế Nghệ An", location: "Nghệ An" },
+      { name: "Trường Đại học Kinh tế - Đại học Huế", location: "Huế" },
+      { name: "Trường Đại học Tây Nguyên", location: "Đắk Lắk" },
+      { name: "Trường Đại học Đồng Nai", location: "Đồng Nai" },
+      { name: "Trường Đại học Bình Dương - Phân hiệu Cà Mau", location: "Cà Mau" },
+      { name: "Trường Đại học Kinh tế Công nghiệp Long An", location: "Vĩnh Long" } // Tuyển sinh liên kết khu vực Vĩnh Long/Long An
+    ],
+    jobs: ["Digital Marketing Executive", "Chuyên viên SEO/SEM", "Chuyên viên Thương hiệu", "Content Creator", "Chuyên viên Phát triển thị trường"]
   },
-  "Marketing": {
-    schools: ["Đại học Kinh tế Quốc dân", "Đại học RMIT Việt Nam", "Đại học Thương mại", "Đại học Ngoại thương", "Đại học Kinh tế - ĐH Đà Nẵng"],
-    jobs: ["Digital Marketing Executive", "Chuyên viên SEO/SEM", "Chuyên viên Thương hiệu (Brand Manager)"]
+  "Kỹ thuật - Công nghệ chế tạo": {
+    schools: [
+      { name: "Đại học Bách khoa Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Công nghiệp Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Bách khoa - ĐH Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Trường Đại học Bách khoa - ĐHQG TP.HCM", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Sư phạm Kỹ thuật TP.HCM", location: "TP. Hồ Chí Minh" },
+      // Phủ các tỉnh thành khác theo thế mạnh kỹ thuật công nghiệp
+      { name: "Trường Đại học Kỹ thuật Công nghiệp - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Đại học Sao Đỏ", location: "Bắc Ninh" }, // Thu hút SV Bắc Ninh/Hải Dương rất đông
+      { name: "Trường Đại học Kỹ thuật - Công nghệ Cần Thơ", location: "Cần Thơ" },
+      { name: "Trường Đại học Công nghệ Đồng Nai", location: "Đồng Nai" },
+      { name: "Trường Đại học Sư phạm Kỹ thuật Vinh", location: "Nghệ An" }
+    ],
+    jobs: ["Kỹ sư Cơ điện tử", "Kỹ sư Tự động hóa", "Kỹ sư Chế tạo máy", "Quản lý dây chuyền sản xuất"]
   },
-  "Thiết kế đồ họa": {
-    schools: ["Trường Đại học Kiến trúc Đà Nẵng", "Trường Đại học Mỹ thuật Đà Nẵng", "Đại học Kiến trúc TP.HCM", "Đại học Văn Lang"],
-    jobs: ["UI/UX Designer", "Graphic Designer", "Chuyên viên Diễn họa 2D/3D (Animator)"]
+  "Quản trị Khách sạn & Du lịch": {
+    schools: [
+      { name: "Trường Đại học Kinh tế Quốc dân", location: "Hà Nội" },
+      { name: "Trường Đại học Thương mại", location: "Hà Nội" },
+      { name: "Trường Đại học Duy Tân", location: "Đà Nẵng" },
+      { name: "Đại học Kinh tế TP.HCM (UEH)", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Tôn Đức Thắng", location: "TP. Hồ Chí Minh" },
+      // Phủ tại các tỉnh trọng điểm du lịch
+      { name: "Trường Đại học Du lịch - Đại học Huế", location: "Huế" },
+      { name: "Trường Đại học Nha Trang", location: "Khánh Hòa" },
+      { name: "Trường Đại học Đà Lạt", location: "Lâm Đồng" },
+      { name: "Trường Đại học Phan Thiết", location: "Tây Ninh" }, // Phục vụ khu vực Đông Nam Bộ/Tây Ninh
+      { name: "Trường Đại học FPT (Phân hiệu Cần Thơ)", location: "Cần Thơ" }
+    ],
+    jobs: ["Quản lý khách sạn/resort", "Điều hành tour du lịch", "Chuyên viên sự kiện", "Quản lý dịch vụ ẩm thực (F&B)"]
+  },
+  "Sư phạm & Ngôn ngữ": {
+    schools: [
+      { name: "Trường Đại học Sư phạm Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Ngoại ngữ - ĐHQG Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Sư phạm - ĐH Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Trường Đại học Ngoại ngữ - ĐH Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Trường Đại học Sư phạm TP.HCM", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Sài Gòn", location: "TP. Hồ Chí Minh" },
+      // Phủ toàn bộ các tỉnh vùng cao và khu vực miền Trung/Miền Tây còn lại
+      { name: "Trường Đại học Sư phạm - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Đại học Hùng Vương", location: "Phú Thọ" },
+      { name: "Trường Đại học Tây Bắc", location: "Sơn La" },
+      { name: "Phân hiệu ĐHQG Hà Nội tại Hòa Bình", location: "Lai Châu" }, // Tuyển sinh liên kết Tây Bắc gồm Lai Châu/Điện Biên
+      { name: "Trường Đại học Vinh", location: "Nghệ An" },
+      { name: "Trường Đại học Hồng Đức", location: "Thanh Hóa" },
+      { name: "Trường Đại học Hà Tĩnh", location: "Hà Tĩnh" },
+      { name: "Trường Đại học Quảng Bình", location: "Quảng Trị" }, // Phục vụ Quảng Trị/Quảng Bình
+      { name: "Trường Đại học Quy Nhơn", location: "Quảng Ngãi" },
+      { name: "Trường Đại học Quy Nhơn (Cơ sở Gia Lai)", location: "Gia Lai" },
+      { name: "Trường Đại học Đồng Tháp", location: "Đồng Tháp" },
+      { name: "Trường Đại học Cần Thơ", location: "Cần Thơ" }
+    ],
+    jobs: ["Giáo viên các cấp", "Giảng viên Anh ngữ/Hoa ngữ", "Biên/Phiên dịch viên", "Chuyên viên Đào tạo doanh nghiệp"]
+  },
+  "Y Dược & Điều dưỡng": {
+    schools: [
+      { name: "Trường Đại học Y Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Dược Hà Nội", location: "Hà Nội" },
+      { name: "Trường Đại học Kỹ thuật Y - Dược Đà Nẵng", location: "Đà Nẵng" },
+      { name: "Trường Đại học Y Dược TP.HCM", location: "TP. Hồ Chí Minh" },
+      { name: "Trường Đại học Y khoa Phạm Ngọc Thạch", location: "TP. Hồ Chí Minh" },
+      // Phủ các tỉnh vệ tinh lớn
+      { name: "Trường Đại học Y Dược - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Đại học Y Dược Hải Phòng", location: "Hải Phòng" },
+      { name: "Trường Đại học Y Dược - Đại học Huế", location: "Huế" },
+      { name: "Trường Đại học Y Dược Cần Thơ", location: "Cần Thơ" },
+      { name: "Trường Đại học Buôn Ma Thuột", location: "Đắk Lắk" }
+    ],
+    jobs: ["Bác sĩ đa khoa / chuyên khoa", "Dược sĩ lâm sàng / tư vấn thuốc", "Điều dưỡng viên chuyên nghiệp", "Kỹ thuật viên phòng xét nghiệm"]
+  },
+  "Nông lâm nghiệp & Môi trường": {
+    schools: [
+      { name: "Học viện Nông nghiệp Việt Nam", location: "Hà Nội" },
+      { name: "Trường Đại học Lâm nghiệp", location: "Hà Nội" },
+      { name: "Trường Đại học Nông Lâm - Đại học Huế", location: "Huế" },
+      { name: "Trường Đại học Nông Lâm TP.HCM", location: "TP. Hồ Chí Minh" },
+      // Phủ các tỉnh nông nghiệp, cao nguyên và vùng cao độc quyền
+      { name: "Trường Đại học Nông Lâm - ĐH Thái Nguyên", location: "Thái Nguyên" },
+      { name: "Trường Cao đẳng miền núi Bắc Kạn", location: "Cao Bằng" }, // Tuyển sinh hệ CĐ/ĐH liên kết Cao Bằng
+      { name: "Phân hiệu Đại học Thái Nguyên tại Lào Cai", location: "Lào Cai" },
+      { name: "Phân hiệu Đại học Thái Nguyên tại Lạng Sơn", location: "Lạng Sơn" },
+      { name: "Phân hiệu Đại học Thái Nguyên tại Hà Giang", location: "Tuyên Quang" }, // Tuyển sinh liên kết Tuyên Quang
+      { name: "Trường Đại học Lâm nghiệp (Cơ sở Đồng Nai)", location: "Đồng Nai" },
+      { name: "Trường Đại học Kiên Giang", location: "Cà Mau" } // Tuyển sinh trục kinh tế biển Cà Mau - Kiên Giang
+    ],
+    jobs: ["Kỹ sư nông nghiệp công nghệ cao", "Chuyên viên quản lý môi trường", "Kỹ sư lâm nghiệp", "Quản lý trang trại chăn nuôi"]
   }
 };
 
-// Fallback danh sách trường mặc định khi chưa chọn ngành ở Bước 1
-const defaultSchoolsList = [
-  "Đại học Bách khoa - ĐH Đà Nẵng",
-  "Đại học Bách Khoa Hà Nội",
-  "Đại học Công nghệ thông tin",
-  "Đại học FPT",
-  "Cao đẳng Kỹ thuật Cao Thắng",
-  "Đại học Kinh tế Quốc dân",
-  "Đại học Kinh tế TP.HCM (UEH)"
+// CƠ SỞ DỮ LIỆU ĐỂ QUÉT TẤT CẢ 34 TỈNH THÀNH (ĐẢM BẢO KHÔNG BỊ TRỐNG KHI SEARCH BẤT KỲ TỈNH NÀO TRONG LIST CỦA BẠN)
+const defaultSchoolsList: SchoolData[] = [
+  // Miền Bắc
+  { name: "Đại học Bách khoa Hà Nội", location: "Hà Nội" },
+  { name: "Trường Đại học Kinh tế Quốc dân", location: "Hà Nội" },
+  { name: "Trường Đại học Ngoại thương", location: "Hà Nội" },
+  { name: "Học viện Công nghệ Bưu chính Viễn thông", location: "Hà Nội" },
+  { name: "Trường Đại học Hàng hải Việt Nam", location: "Hải Phòng" },
+  { name: "Trường Đại học Sư phạm Kỹ thuật Hưng Yên", location: "Hưng Yên" },
+  { name: "Trường Đại học Kỹ thuật Công nghiệp - ĐH Thái Nguyên", location: "Thái Nguyên" },
+  { name: "Trường Đại học Hùng Vương", location: "Phú Thọ" },
+  { name: "Trường Đại học Tây Bắc", location: "Sơn La" },
+  { name: "Trường Cao đẳng Sư phạm Cao Bằng", location: "Cao Bằng" },
+  { name: "Phân hiệu Đại học Thái Nguyên tại Lào Cai", location: "Lào Cai" },
+  { name: "Phân hiệu Đại học Thái Nguyên tại Lạng Sơn", location: "Lạng Sơn" },
+  { name: "Trường Đại học Tân Trào", location: "Tuyên Quang" },
+  { name: "Trường Đại học Hoa Lư", location: "Ninh Bình" },
+  { name: "Trường Đại học Công nghiệp Quảng Ninh", location: "Quảng Ninh" },
+  { name: "Trường Đại học Công nghệ Đông Á", location: "Bắc Ninh" },
+  { name: "Trường Cao đẳng Cộng đồng Lai Châu", location: "Lai Châu" },
+  { name: "Trường Cao đẳng Nghề Điện Biên", location: "Điện Biên" },
+
+  // Miền Trung / Tây Nguyên
+  { name: "Trường Đại học Hồng Đức", location: "Thanh Hóa" },
+  { name: "Trường Đại học Vinh", location: "Nghệ An" },
+  { name: "Trường Đại học Hà Tĩnh", location: "Hà Tĩnh" },
+  { name: "Trường Đại học Bách khoa - ĐH Đà Nẵng", location: "Đà Nẵng" },
+  { name: "Trường Đại học Kinh tế - ĐH Đà Nẵng", location: "Đà Nẵng" },
+  { name: "Trường Đại học Ngoại ngữ - Đại học Huế", location: "Huế" },
+  { name: "Trường Đại học Y Dược - Đại học Huế", location: "Huế" },
+  { name: "Trường Đại học Sư phạm Kỹ thuật Quảng Nam", location: "Quảng Ngãi" }, // Khu vực Quảng Ngãi/Quảng Nam
+  { name: "Trường Phân hiệu Đại học Huế tại Quảng Trị", location: "Quảng Trị" },
+  { name: "Trường Đại học Nha Trang", location: "Khánh Hòa" },
+  { name: "Trường Đại học Đà Lạt", location: "Lâm Đồng" },
+  { name: "Trường Đại học Tây Nguyên", location: "Đắk Lắk" },
+  { name: "Trường Đại học Lâm Nghiệp (Phân hiệu Gia Lai)", location: "Gia Lai" },
+
+  // Miền Nam / Miền Tây
+  { name: "Trường Đại học Bách khoa - ĐHQG TP.HCM", location: "TP. Hồ Chí Minh" },
+  { name: "Trường Đại học Công nghệ thông tin - ĐHQG TP.HCM", location: "TP. Hồ Chí Minh" },
+  { name: "Đại học Kinh tế TP.HCM (UEH)", location: "TP. Hồ Chí Minh" },
+  { name: "Trường Đại học Cần Thơ", location: "Cần Thơ" },
+  { name: "Trường Đại học Y Dược Cần Thơ", location: "Cần Thơ" },
+  { name: "Trường Đại học Sư phạm Kỹ thuật Vĩnh Long", location: "Vĩnh Long" },
+  { name: "Trường Đại học Đồng Tháp", location: "Đồng Tháp" },
+  { name: "Trường Đại học An Giang - ĐHQG TP.HCM", location: "An Giang" },
+  { name: "Trường Đại học Lạc Hồng", location: "Đồng Nai" },
+  { name: "Trường Đại học Công nghệ Đồng Nai", location: "Đồng Nai" },
+  { name: "Trường Đại học Bình Dương (Phân hiệu Cà Mau)", location: "Cà Mau" },
+  { name: "Trường Cao đẳng Sư phạm Tây Ninh", location: "Tây Ninh" },
+  
+  // Toàn quốc
+  { name: "Đại học FPT", location: "Toàn quốc" },
+  { name: "Trường Đại học RMIT Việt Nam", location: "Toàn quốc" }
 ];
 
 interface SchoolMajorItem {
@@ -258,10 +424,26 @@ export function QuickCareerAdvisor() {
     setAnswer(null);
   };
 
-  // Đổ danh sách trường: Nếu chọn ngành thì lấy theo ngành, nếu chưa chọn ngành thì lấy danh sách tổng hợp
-  const currentSchools = industry ? (sampleDataByIndustry[industry]?.schools || []) : defaultSchoolsList;
-  const currentJobs = sampleDataByIndustry[industry]?.jobs || ["Chuyên viên Junior", "Thực tập sinh", "Trưởng nhóm chuyên môn"];
+  // Filter schools based on selected industry and location
+  const allPossibleSchools: SchoolData[] = industry
+    ? (sampleDataByIndustry[industry]?.schools || [])
+    : defaultSchoolsList;
 
+  const filteredSchools = allPossibleSchools.filter(
+    (school) =>
+      location === "Toàn quốc" || // If "Toàn quốc" is selected, show all schools
+      school.location === "Toàn quốc" || // If school itself is "Toàn quốc", always show
+      school.location === location
+  );
+
+  // Update selectedSchool if the currently selected school is no longer in the filtered list
+  useEffect(() => {
+    if (selectedSchool && !filteredSchools.some(s => s.name === selectedSchool)) {
+      setSelectedSchool("");
+    }
+  }, [location, industry, filteredSchools, selectedSchool]);
+
+  const currentJobs = sampleDataByIndustry[industry]?.jobs || ["Chuyên viên Junior", "Thực tập sinh", "Trưởng nhóm chuyên môn"];
   return (
     <Box component="section" id="quickcareer" sx={{ py: 4, bgcolor: grey[50] }}>
       <Container maxWidth="md">
@@ -288,10 +470,10 @@ export function QuickCareerAdvisor() {
             sx={{ width: "100%", p: { xs: 2, md: 3 }, borderRadius: 3, border: `1px solid ${grey[200]}` }}
           >
             <Stack spacing={2.5}>
-              {/* BƯỚC 1: CHỌN NGÀNH NGHỀ & KHU VỰC MONG MUỐN */}
+              {/* BƯỚC 1: CHỌN NGÀNH NGHỀ & KHU VỰC MONG MUỐN HỌC TẬP/LÀM VIỆC */}
               <Box>
                 <Typography component="div" variant="body2" fontWeight="bold" color={blue[900]} sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1 }}>
-                  <Chip size="small" label="Bước 1" color="primary" sx={{ height: 20, fontSize: 11 }} /> Chọn ngành học bạn quan tâm:
+                   Chọn ngành học bạn quan tâm:
                 </Typography>
                 
                 <Grid container spacing={2}>
@@ -317,7 +499,7 @@ export function QuickCareerAdvisor() {
                   </Grid>
                   <Grid size={{ xs: 12, sm: 4 }}>
                     <FormControl fullWidth size="small">
-                      <InputLabel sx={{ fontSize: 13 }}>Khu vực mong muốn</InputLabel>
+                      <InputLabel sx={{ fontSize: 13 }}>Khu vực mong muốn học tập/ làm việc</InputLabel>
                       <Select
                         value={location}
                         label="Khu vực đào tạo"
@@ -338,11 +520,10 @@ export function QuickCareerAdvisor() {
 
               <Divider />
 
-              {/* BƯỚC 2: CHỌN MỤC TIÊU PHÂN TÁCH LUỒNG */}
               {/* Loại bỏ thuộc tính opacity/pointer-events ẩn form để mở rộng cho phép người dùng chọn Trường học ngay từ đầu */}
               <Box sx={{ transition: "all 0.3s" }}>
                 <Typography component="div" variant="body2" fontWeight="bold" color={blue[900]} sx={{ mb: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
-                  <Chip size="small" label="Bước 2" color="primary" sx={{ height: 20, fontSize: 11 }} /> Chọn mục tiêu cụ thể:
+                   Chọn mục tiêu cụ thể:
                 </Typography>
 
                 <Grid container spacing={1.5}>
@@ -367,8 +548,8 @@ export function QuickCareerAdvisor() {
                             sx={{ fontSize: 13 }}
                           >
                             {/* Restore MenuItem children */}
-                            {currentSchools.map((sch) => (
-                              <MenuItem key={sch} value={sch} sx={{ fontSize: 13 }}>{sch}</MenuItem>
+                            {filteredSchools.map((sch) => (
+                              <MenuItem key={sch.name} value={sch.name} sx={{ fontSize: 13 }}>{sch.name}</MenuItem>
                             ))}
                           </Select>
                         </FormControl>
@@ -469,7 +650,7 @@ export function QuickCareerAdvisor() {
                     <SchoolIcon color="primary" fontSize="small" /> Danh sách ngành đào tạo tiêu biểu của trường:
                   </Typography>
                   <Grid container spacing={1.5}>
-                    {answer.topMajors.map((majorItem, idx) => (
+                    {answer.topMajors.map((majorItem, idx) => ( // Changed size to item xs and sm
                       <Grid size={{ xs: 12, sm: 6 }} key={idx}>
                         <Card variant="outlined" sx={{ borderRadius: 2, bgcolor: "#fff" }}>
                           <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -533,7 +714,7 @@ export function QuickCareerAdvisor() {
                     <SchoolIcon fontSize="small" /> Chi tiết ngành {answer.majorInfo.majorName || answer.majorName} tại trường {answer.schoolName || selectedSchool}
                   </Typography>
                   <Stack spacing={1.5} sx={{ mt: 1.5 }}>
-                    <Box sx={{ p: 1.5, bgcolor: grey[50], borderRadius: 1.5 }}>
+                    <Box sx={{ p: 1.5, bgcolor: grey[50], borderRadius: 1.5 }}> {/* Changed size to item xs */}
                       <Grid container alignItems="center">
                         <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary" display="block">Điểm chuẩn tra cứu:</Typography>
@@ -543,7 +724,7 @@ export function QuickCareerAdvisor() {
                         </Grid>
                         <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary" display="block">Năm tuyển sinh:</Typography>
-                          <Typography variant="body2" fontWeight="bold">
+                          <Typography variant="body2" fontWeight="bold"> {/* Changed size to item xs */}
                             Năm {answer.majorInfo.benchmarkYear || 2025}
                           </Typography>
                         </Grid>

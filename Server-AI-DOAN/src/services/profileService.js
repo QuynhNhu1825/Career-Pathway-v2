@@ -538,6 +538,14 @@ const getHistory = async (userId) => {
 
                 const meta = generateCareerMetadata(recommendedCareer);
 
+                let finalRoadmap = [];
+                if (!isStudent) { 
+                    // Nếu KHÔNG PHẢI học sinh cấp 3 (tức là sinh viên Cao đẳng/Đại học hoặc người đi làm)
+                    finalRoadmap = roadmap.length > 0 ? roadmap : meta.roadmap;
+                } else {
+                    // Nếu là học sinh cấp 3 -> Ẩn lộ trình nghề nghiệp (để mảng rỗng)
+                    finalRoadmap = []; 
+                }
                 sessionsMap[q.sessionId] = {
                     sessionId: q.sessionId,
                     mode,
@@ -551,7 +559,7 @@ const getHistory = async (userId) => {
                     details,
                     recommendedCareer,
                     conclusionReason,
-                    roadmap: roadmap.length > 0 ? roadmap : meta.roadmap, // Sử dụng roadmap đã lấy được, nếu không thì dùng meta.roadmap
+                    roadmap: finalRoadmap,
                     matchingSchools: matchingSchools, // Sử dụng biến đã được gán lại
                     marketSalaries: meta.salaries,
                     hiringCompanies: hiringCompanies,

@@ -3,6 +3,7 @@ import { apiRequest } from "../services/api";
 import { useAuth } from "./AuthContext";
 
 export interface Category {
+  moTa: string; // Đã sửa kiểu dữ liệu thành 'string' và loại bỏ 'description' không dùng đến
   id: string;
   tenNganh: string;
   truong: string;

@@ -421,7 +421,8 @@ const getCareers = async () => {
       raw: true
     });
 
-    const categories = await KetQuaDiscoveryHoc.findAll({
+    // Lấy danh mục từ KetQuaDiscoveryLam để đảm bảo tính nhất quán với frontend
+    const categoriesFromDiscoveryLam = await KetQuaDiscoveryLam.findAll({
       where: {
         careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
       },
@@ -429,13 +430,13 @@ const getCareers = async () => {
     });
 
     const mappedCareers = careers.map((c) => {
-      const matchedCat = categories.find(
+      const matchedCat = categoriesFromDiscoveryLam.find(
         (cat) => cat.careerName.toLowerCase() === c.careerName.toLowerCase()
       );
       const categoryId = matchedCat
         ? matchedCat.id.toString()
-        : categories[0]
-        ? categories[0].id.toString()
+        : categoriesFromDiscoveryLam[0] // Fallback to the first available category from KetQuaDiscoveryLam
+        ? categoriesFromDiscoveryLam[0].id.toString()
         : '1';
 
       return {
@@ -515,13 +516,13 @@ const deleteCareer = async (id) => {
 };
 
 /**
- * --- QUẢN LÝ CATEGORIES (Danh mục ngành học) - Từ bảng discovery_hoc ---
+ * --- QUẢN LÝ CATEGORIES (Danh mục ngành học) - Từ bảng discovery_lam ---
  */
 const getCategories = async () => {
   try {
-    const categories = await KetQuaDiscoveryHoc.findAll({
+    const categories = await KetQuaDiscoveryLam.findAll({
       where: {
-        careerName: { [Op.ne]: null, [Op.notIn]: ['', 'null', 'undefined'] }
+        careerName: { [Op.ne]: null, [Op.ne]: '', [Op.notIn]: ['null', 'undefined'] }
       },
       order: [['id', 'ASC']],
       raw: true
@@ -529,12 +530,14 @@ const getCategories = async () => {
 
     const mappedCategories = categories.map((c) => ({
       id: c.id.toString(),
-      tenNganh: c.careerName,
-      truong: c.schoolName || '',
-      diemChuan: c.benchmark2025 || c.benchmark2024 || 'Xem chi tiết',
-      link: c.officialLink || c.admissionLink || '',
-      nam: '2025',
-      xuHuong: 'Hot'
+      tenNganh: c.careerName ? c.careerName.trim() : '', 
+      // Đảm bảo lấy đúng trường jobDescription từ DB chuyển thành moTa
+      moTa: c.jobDescription ? c.jobDescription.trim() : 'Chưa có mô tả cho ngành này.', 
+      truong: c.companyName || '', 
+      diemChuan: 'N/A', 
+      link: c.careerLink || '', // Lấy luôn link gốc từ DB nếu có
+      nam: 'N/A', 
+      xuHuong: 'N/A' 
     }));
 
     return { success: true, categories: mappedCategories };
@@ -546,20 +549,22 @@ const getCategories = async () => {
 
 const createCategory = async (data) => {
   try {
-    // Lấy sessionId và userId hợp lệ từ lichsutest để thỏa mãn khóa ngoại
     const firstTest = await LichSuTest.findOne({ order: [['id', 'ASC']] });
     const defaultSessionId = firstTest ? firstTest.sessionId : null;
     const defaultUserId = firstTest ? firstTest.userId : null;
 
-    await KetQuaDiscoveryHoc.create({
-      careerName: data.tenNganh || data.name,
-      schoolName: data.truong || data.school || '',
-      benchmark2025: data.diemChuan || data.score || null,
-      officialLink: data.link || '',
-      admissionLink: data.link || '',
-      // Sử dụng sessionId và userId hợp lệ để tránh lỗi khóa ngoại
+    await KetQuaDiscoveryLam.create({
+      careerName: data.tenNganh || data.name, 
+      jobDescription: data.moTa || data.description || `Mô tả cho ngành ${data.tenNganh || data.name}`, 
       sessionId: defaultSessionId,
       userId: defaultUserId,
+      // Explicitly set other fields to null as they are not part of the "category" concept
+      companyName: null,
+      basicSalary: null,
+      careerLink: null,
+      roles: null,
+      outlook: null,
+      requiredSkills: null,
     });
     return { success: true, message: 'Tạo danh mục ngành học thành công' };
   } catch (error) {
@@ -570,25 +575,29 @@ const createCategory = async (data) => {
 
 const updateCategory = async (id, data) => {
   try {
-    const category = await KetQuaDiscoveryHoc.findByPk(id);
+    const category = await KetQuaDiscoveryLam.findByPk(id); 
     if (!category) {
       return { success: false, message: 'Danh mục ngành học không tồn tại' };
     }
+    
     const updateFields = {};
-    if (data.tenNganh !== undefined || data.name !== undefined) {
-      updateFields.careerName = data.tenNganh || data.name;
+    
+    // Cập nhật tên ngành nếu có truyền lên
+    if (data.tenNganh !== undefined) { 
+      updateFields.careerName = data.tenNganh;
+    } else if (data.name !== undefined) {
+      updateFields.careerName = data.name;
     }
-    if (data.truong !== undefined || data.school !== undefined) {
-      updateFields.schoolName = data.truong || data.school;
+    
+    // Cập nhật mô tả ngành nếu có truyền lên
+    if (data.moTa !== undefined) { 
+      updateFields.jobDescription = data.moTa;
+    } else if (data.description !== undefined) {
+      updateFields.jobDescription = data.description;
     }
-    if (data.diemChuan !== undefined || data.score !== undefined) {
-      updateFields.benchmark2025 = data.diemChuan || data.score || null;
-    }
-    if (data.link !== undefined) {
-      updateFields.officialLink = data.link;
-      updateFields.admissionLink = data.link;
-    }
-    await KetQuaDiscoveryHoc.update(updateFields, { where: { id } });
+
+    // NGUYÊN TẮC: CHỈ CẬP NHẬT TRƯỜNG CÓ THAY ĐỔI, KHÔNG TỰ Ý SET NULL CÁC CỘT KHÁC CỦA DÒNG ĐÓ
+    await KetQuaDiscoveryLam.update(updateFields, { where: { id } });
     return { success: true, message: 'Cập nhật danh mục ngành học thành công' };
   } catch (error) {
     console.error('Lỗi updateCategory:', error);
@@ -598,11 +607,11 @@ const updateCategory = async (id, data) => {
 
 const deleteCategory = async (id) => {
   try {
-    const category = await KetQuaDiscoveryHoc.findByPk(id);
+    const category = await KetQuaDiscoveryLam.findByPk(id); 
     if (!category) {
       return { success: false, message: 'Danh mục ngành học không tồn tại' };
     }
-    await KetQuaDiscoveryHoc.destroy({ where: { id } });
+    await KetQuaDiscoveryLam.destroy({ where: { id } }); 
     return { success: true, message: 'Xóa danh mục ngành học thành công' };
   } catch (error) {
     console.error('Lỗi deleteCategory:', error);

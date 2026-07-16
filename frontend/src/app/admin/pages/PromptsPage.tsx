@@ -67,6 +67,12 @@ export function PromptsPage() {
   const [formData, setFormData] = useState(initialFormState);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'info' | 'warning' });
 
+  // State for validation errors
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
+
   const refreshPrompts = async () => {
     try {
       const res = await apiRequest("/admin/prompts");
@@ -89,7 +95,82 @@ export function PromptsPage() {
       (prompt.description || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Validation function
+  const validateForm = () => {
+    let isValid = true;
+
+    // Code validation
+    if (!formData.code.trim()) {
+      setCodeError("Mã Prompt không được để trống.");
+      isValid = false;
+    } else if (formData.code.trim().length > 50) {
+      setCodeError("Mã Prompt không được vượt quá 50 ký tự.");
+      isValid = false;
+    } else if (
+      prompts.some(
+        (p) =>
+          p.code.toLowerCase() === formData.code.trim().toLowerCase() &&
+          p.id !== editingPrompt?.id
+      )
+    ) {
+      setCodeError("Mã Prompt đã tồn tại.");
+      isValid = false;
+    } else if (formData.code.trim().includes(" ")) {
+      setCodeError("Mã Prompt không được chứa khoảng trắng.");
+      isValid = false;
+    } else {
+      setCodeError(null);
+    }
+
+    // Title validation
+    if (!formData.title.trim()) {
+      setTitleError("Tiêu đề không được để trống.");
+      isValid = false;
+    } else if (formData.title.trim().length > 255) {
+      setTitleError("Tiêu đề không được vượt quá 255 ký tự.");
+      isValid = false;
+    } else if (
+      prompts.some(
+        (p) =>
+          p.title.toLowerCase() === formData.title.trim().toLowerCase() &&
+          p.id !== editingPrompt?.id
+      )
+    ) {
+      setTitleError("Tiêu đề Prompt đã tồn tại.");
+      isValid = false;
+    } else {
+      setTitleError(null);
+    }
+
+    // Version validation
+    if (!formData.version.trim()) {
+      setVersionError("Phiên bản không được để trống.");
+      isValid = false;
+    } else if (formData.version.trim().length > 20) {
+      setVersionError("Phiên bản không được vượt quá 20 ký tự.");
+      isValid = false;
+    } else {
+      setVersionError(null);
+    }
+
+    // Content validation
+    if (!formData.content.trim()) {
+      setContentError("Nội dung không được để trống.");
+      isValid = false;
+    } else if (formData.content.trim().length > 5000) {
+      setContentError("Nội dung không được vượt quá 5000 ký tự.");
+      isValid = false;
+    } else {
+      setContentError(null);
+    }
+
+    return isValid;
+  };
+
   const handleAdd = async () => {
+    if (!validateForm()) {
+      return;
+    }
     try {
       await apiRequest("/admin/prompts", {
         method: "POST",
@@ -98,6 +179,11 @@ export function PromptsPage() {
       await refreshPrompts();
       setIsAddDialogOpen(false);
       setFormData(initialFormState);
+      // Clear all errors on successful add
+      setCodeError(null);
+      setTitleError(null);
+      setVersionError(null);
+      setContentError(null);
       setNotification({ open: true, message: 'Thêm prompt thành công!', severity: 'success' });
     } catch (err) {
       console.error(err);
@@ -116,9 +202,18 @@ export function PromptsPage() {
       description: prompt.description,
       content: prompt.content,
     });
+    // Clear all errors when opening edit dialog
+    setCodeError(null);
+    setTitleError(null);
+    setVersionError(null);
+    setContentError(null);
   };
 
   const handleUpdate = async () => {
+    if (!validateForm()) {
+      setNotification({ open: true, message: 'Vui lòng kiểm tra lại các trường thông tin.', severity: 'error' });
+      return;
+    }
     if (!editingPrompt) return;
     try {
       await apiRequest(`/admin/prompts/${editingPrompt.id}`, {
@@ -127,6 +222,11 @@ export function PromptsPage() {
       });
       await refreshPrompts();
       setEditingPrompt(null);
+      setFormData(initialFormState);
+      // Clear all errors on successful update
+      setCodeError(null);
+      setTitleError(null);
+      setVersionError(null);
       setFormData(initialFormState);
       setNotification({ open: true, message: 'Cập nhật prompt thành công!', severity: 'success' });
     } catch (err) {
@@ -150,11 +250,7 @@ export function PromptsPage() {
     }
   };
 
-  const isFormValid =
-    formData.code.trim() &&
-    formData.title.trim() &&
-    formData.version.trim() &&
-    formData.content.trim();
+  const isFormValid = !codeError && !titleError && !versionError && !contentError && formData.code.trim() && formData.title.trim() && formData.version.trim() && formData.content.trim();
 
   const getStatusLabel = (status: string) => {
   return status === "active"
@@ -182,7 +278,25 @@ export function PromptsPage() {
         label="Mã Prompt"
         placeholder="Ví dụ: 101"
         value={formData.code}
-        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+        onChange={(e) => {
+          setFormData({ ...formData, code: e.target.value });
+          const value = e.target.value.trim();
+          if (!value) {
+            setCodeError("Mã Prompt không được để trống.");
+          } else if (value.length > 50) {
+            setCodeError("Mã Prompt không được vượt quá 50 ký tự.");
+          } else if (value.includes(" ")) {
+            setCodeError("Mã Prompt không được chứa khoảng trắng.");
+          } else if (prompts.some(p => p.code.toLowerCase() === value.toLowerCase() && p.id !== editingPrompt?.id)) {
+            // Check for uniqueness only if it's not the current editing prompt
+            setCodeError("Mã Prompt đã tồn tại.");
+          }
+          else {
+            setCodeError(null);
+          }
+        }}
+        error={!!codeError}
+        helperText={codeError}
         sx={inputSx}
       />
 
@@ -191,8 +305,22 @@ export function PromptsPage() {
         size="small"
         label="Tiêu đề"
         placeholder="Nhập tiêu đề prompt"
-        value={formData.title}
-        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+        value={formData.title} // Ensure this is formData.title
+        onChange={(e) => {
+          setFormData({ ...formData, title: e.target.value });
+          const value = e.target.value.trim();
+          if (!value) {
+            setTitleError("Tiêu đề không được để trống.");
+          } else if (value.length > 255) {
+            setTitleError("Tiêu đề không được vượt quá 255 ký tự.");
+          } else if (prompts.some(p => p.title.toLowerCase() === value.toLowerCase() && p.id !== editingPrompt?.id)) {
+            setTitleError("Tiêu đề Prompt đã tồn tại.");
+          } else {
+            setTitleError(null);
+          }
+        }}
+        error={!!titleError}
+        helperText={titleError}
         sx={inputSx}
       />
 
@@ -207,11 +335,21 @@ export function PromptsPage() {
           fullWidth
           size="small"
           label="Phiên bản"
-          placeholder="Ví dụ: 1.0.0"
+          placeholder="Ví dụ: 1"
           value={formData.version}
-          onChange={(e) =>
-            setFormData({ ...formData, version: e.target.value })
-          }
+          onChange={(e) => {
+            setFormData({ ...formData, version: e.target.value });
+            const value = e.target.value.trim();
+            if (!value) {
+              setVersionError("Phiên bản không được để trống.");
+            } else if (value.length > 20) {
+              setVersionError("Phiên bản không được vượt quá 20 ký tự.");
+            } else {
+              setVersionError(null);
+            }
+          }}
+          error={!!versionError}
+          helperText={versionError}
           sx={inputSx}
         />
 
@@ -225,22 +363,10 @@ export function PromptsPage() {
             }
           >
             <MenuItem value="active">Hoạt động</MenuItem>
-            <MenuItem value="inactive">Bảo trì / Khóa</MenuItem>
+            <MenuItem value="inactive">Bảo trì </MenuItem>
           </Select>
         </FormControl>
       </Box>
-
-      <TextField
-        fullWidth
-        size="small"
-        label="Biến đầu vào"
-        placeholder="Ví dụ: {skills}, {interests}"
-        value={formData.inputVariables}
-        onChange={(e) =>
-          setFormData({ ...formData, inputVariables: e.target.value })
-        }
-        sx={inputSx}
-      />
 
       <TextField
         fullWidth
@@ -250,9 +376,16 @@ export function PromptsPage() {
         label="Mô tả"
         placeholder="Nhập mô tả ngắn gọn"
         value={formData.description}
-        onChange={(e) =>
-          setFormData({ ...formData, description: e.target.value })
-        }
+        onChange={(e) => { // No specific validation for description length, but keeping the structure
+          setFormData({ ...formData, description: e.target.value }); 
+          const value = e.target.value.trim();
+          if (value.length > 1000) { // Example max length
+            // You might want to add a state for description error if needed
+            // setDescriptionError("Mô tả không được vượt quá 1000 ký tự."); // No error state for description
+          } else {
+            // setDescriptionError(null);
+          }
+        }}
         sx={inputSx}
       />
 
@@ -264,9 +397,18 @@ export function PromptsPage() {
         label="Nội dung"
         placeholder="Nhập nội dung cấu hình prompt cho AI..."
         value={formData.content}
-        onChange={(e) =>
-          setFormData({ ...formData, content: e.target.value })
-        }
+        onChange={(e) => {
+          setFormData({ ...formData, content: e.target.value });
+          if (!e.target.value.trim()) {
+            setContentError("Nội dung không được để trống.");
+          } else if (e.target.value.trim().length > 5000) {
+            setContentError("Nội dung không được vượt quá 5000 ký tự.");
+          } else {
+            setContentError(null);
+          }
+        }}
+        error={!!contentError}
+        helperText={contentError}
         sx={inputSx}
       />
     </Box>
@@ -561,8 +703,14 @@ export function PromptsPage() {
                       />
                     </TableCell>
 
-                    <TableCell>
-                      <Typography sx={{ fontSize: 13, color: textMuted }}>
+                    <TableCell sx={{ minWidth: "120px" }}> {/* Đảm bảo ô luôn rộng tối thiểu 120px */}
+                      <Typography 
+                        sx={{ 
+                          fontSize: 13, 
+                          color: textMuted,
+                          whiteSpace: "nowrap" // Ép ngày tháng luôn nằm trên 1 dòng, không bao giờ bị tự động xuống dòng bừa bãi
+                        }}
+                      >
                         {prompt.createdAt}
                       </Typography>
                     </TableCell>

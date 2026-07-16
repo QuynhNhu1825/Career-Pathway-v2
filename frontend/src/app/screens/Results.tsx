@@ -341,7 +341,7 @@ export function Results({
                   <Stack spacing={3}>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                        🏢 Công ty đang tuyển dụng:
+                        Công ty đang tuyển dụng:
                       </Typography>
                       <Stack spacing={1.5}>
                         {companies.map((comp: any, i: number) => (
